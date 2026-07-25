@@ -1,5 +1,5 @@
 /* Offline app-shell cache. Google API + auth calls always go to the network. */
-const CACHE = "budget-shell-v1";
+const CACHE = "budget-shell-v2";
 const ASSETS = [
   "./",
   "./index.html",

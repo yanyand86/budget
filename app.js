@@ -11,30 +11,71 @@ const DRIVE_FILE = "budget.json";
 const SCOPE = "https://www.googleapis.com/auth/drive.appdata";
 
 const CAT = {
-  rent:      { label: "Rent / Mortgage", emoji: "\uD83C\uDFE0", color: "#4E7A93" },
-  council:   { label: "Council tax",     emoji: "\uD83C\uDFDB\uFE0F", color: "#6E7C8A" },
-  electric:  { label: "Electricity",     emoji: "\u26A1", color: "#C9974E" },
-  gas:       { label: "Gas / heating",   emoji: "\uD83D\uDD25", color: "#C07358" },
-  water:     { label: "Water",           emoji: "\uD83D\uDCA7", color: "#5E8FA8" },
-  internet:  { label: "Broadband",       emoji: "\uD83D\uDCF6", color: "#5C7AA8" },
-  phone:     { label: "Mobile phone",    emoji: "\uD83D\uDCF1", color: "#8B7FA6" },
-  groceries: { label: "Groceries",       emoji: "\uD83D\uDED2", color: "#5C9A86" },
-  transport: { label: "Transport",       emoji: "\uD83D\uDE8C", color: "#5E8FA8" },
-  fuel:      { label: "Fuel",            emoji: "\u26FD", color: "#7C7163" },
-  subs:      { label: "Subscriptions",   emoji: "\uD83D\uDCFA", color: "#BC7E92" },
-  insurance: { label: "Insurance",       emoji: "\uD83D\uDEE1\uFE0F", color: "#5C7AA8" },
-  health:    { label: "Health / gym",    emoji: "\uD83C\uDFCB\uFE0F", color: "#5C9A86" },
-  dining:    { label: "Eating out",      emoji: "\uD83C\uDF7D\uFE0F", color: "#C07358" },
-  childcare: { label: "Childcare",       emoji: "\uD83D\uDC76", color: "#BC7E92" },
-  savings:   { label: "Savings",         emoji: "\uD83D\uDC37", color: "#3F9D8A" },
-  loan:      { label: "Loan / credit",   emoji: "\uD83D\uDCB3", color: "#C26B57" },
-  other:     { label: "Other",           emoji: "\uD83E\uDDFE", color: "#8A94A6" }
+  rent:      { label: "Rent / Mortgage", glyph: "home",     color: "#7C3AED" },
+  council:   { label: "Council tax",     glyph: "landmark", color: "#6366F1" },
+  electric:  { label: "Electricity",     glyph: "zap",      color: "#F59E0B" },
+  gas:       { label: "Gas / heating",   glyph: "flame",    color: "#F97316" },
+  water:     { label: "Water",           glyph: "droplet",  color: "#06B6D4" },
+  internet:  { label: "Broadband",       glyph: "wifi",     color: "#3B82F6" },
+  phone:     { label: "Mobile phone",    glyph: "phone",    color: "#A855F7" },
+  groceries: { label: "Groceries",       glyph: "cart",     color: "#22C55E" },
+  transport: { label: "Transport",       glyph: "bus",      color: "#0EA5E9" },
+  fuel:      { label: "Fuel",            glyph: "fuel",     color: "#EF4444" },
+  subs:      { label: "Subscriptions",   glyph: "tv",       color: "#EC4899" },
+  insurance: { label: "Insurance",       glyph: "shield",   color: "#14B8A6" },
+  health:    { label: "Health / gym",    glyph: "dumbbell", color: "#10B981" },
+  dining:    { label: "Eating out",      glyph: "utensils", color: "#FB7185" },
+  childcare: { label: "Childcare",       glyph: "stroller", color: "#F472B6" },
+  savings:   { label: "Savings",         glyph: "coins",    color: "#00C48C" },
+  loan:      { label: "Loan / credit",   glyph: "card",     color: "#E11D48" },
+  other:     { label: "Other",           glyph: "receipt",  color: "#64748B" }
 };
 const CAT_ORDER = ["rent","council","electric","gas","water","internet","phone","groceries","transport","fuel","subs","insurance","health","dining","childcare","savings","loan","other"];
 const catOf = (k) => CAT[k] || CAT.other;
 
-const GOAL_EMOJI = ["\uD83D\uDEDF","\u2708\uFE0F","\uD83C\uDFE0","\uD83D\uDE97","\uD83C\uDF81","\uD83D\uDC8D","\uD83C\uDF93","\uD83D\uDCBB","\u2764\uFE0F","\uD83D\uDC37","\uD83D\uDCF1","\uD83D\uDECB\uFE0F"];
-const GOAL_COLORS = ["#3F9D8A","#5C7AA8","#C9974E","#C07358","#8B7FA6","#5C9A86","#BC7E92","#4E7A93"];
+const GOAL_GLYPHS = ["lifebuoy","plane","home","car","gift","diamond","cap","laptop","heart","coins","phone","sofa"];
+const GOAL_COLORS = ["#00C48C","#6D28D9","#F59E0B","#EF4444","#0EA5E9","#EC4899","#14B8A6","#F97316"];
+const EMOJI_MAP = { "\uD83D\uDEDF":"lifebuoy", "\u2708\uFE0F":"plane", "\uD83C\uDFE0":"home", "\uD83D\uDE97":"car", "\uD83C\uDF81":"gift", "\uD83D\uDC8D":"diamond", "\uD83C\uDF93":"cap", "\uD83D\uDCBB":"laptop", "\u2764\uFE0F":"heart", "\uD83D\uDC37":"coins", "\uD83D\uDCF1":"phone", "\uD83D\uDECB\uFE0F":"sofa" };
+
+/* hand-drawn icon set (24x24 stroke glyphs) */
+const GLYPH = {
+  home:'<path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/><path d="M9.5 20v-6h5v6"/>',
+  landmark:'<path d="M3 9.5 12 4l9 5.5"/><path d="M5.5 10.5v7.5M9.8 10.5v7.5M14.2 10.5v7.5M18.5 10.5v7.5"/><path d="M3.5 20.5h17"/>',
+  zap:'<path d="M13.2 2.5 4.8 13.6h6.1l-.9 7.9 8.3-11.2h-6.2z"/>',
+  flame:'<path d="M12 21.5c3.6 0 6.2-2.4 6.2-5.7 0-4.3-4.3-6.3-4.3-9.6 0 0-1.9 1.4-1.9 3.8 0 1.4-1 1.9-1.5 1.1-.4-.6-.8-1.5-.8-2.4-1.9 1.7-3.9 3.8-3.9 7.6 0 3.3 2.6 5.2 6.2 5.2Z"/>',
+  droplet:'<path d="M12 3s5.8 6 5.8 10.2A5.8 5.8 0 0 1 6.2 13.2C6.2 9 12 3 12 3Z"/>',
+  wifi:'<path d="M2.8 9.2a14.5 14.5 0 0 1 18.4 0"/><path d="M6 12.6a9.6 9.6 0 0 1 12 0"/><path d="M9.2 16a5 5 0 0 1 5.6 0"/><circle cx="12" cy="19.4" r="1.15" fill="currentColor" stroke="none"/>',
+  phone:'<rect x="6.5" y="2.5" width="11" height="19" rx="2.6"/><path d="M10.4 18.6h3.2"/>',
+  cart:'<path d="M2.6 3.6h2.2l2.3 11.1a2 2 0 0 0 2 1.6h7.5a2 2 0 0 0 2-1.55l1.35-6.1H6"/><circle cx="9.6" cy="19.9" r="1.45"/><circle cx="17" cy="19.9" r="1.45"/>',
+  bus:'<rect x="3.6" y="3.5" width="16.8" height="13" rx="2.6"/><path d="M3.6 10.4h16.8"/><path d="M6.8 16.5v2.6M17.2 16.5v2.6"/><circle cx="8.1" cy="13.5" r=".95" fill="currentColor" stroke="none"/><circle cx="15.9" cy="13.5" r=".95" fill="currentColor" stroke="none"/>',
+  fuel:'<path d="M4.5 20.8V5.2a2 2 0 0 1 2-2h4.6a2 2 0 0 1 2 2v15.6"/><path d="M3.2 20.8h11.2"/><path d="M6.9 8.4h3.8"/><path d="M13.1 9.2h3.2a1.5 1.5 0 0 1 1.5 1.5v5.9a1.6 1.6 0 0 0 3.2 0v-5.4l-2.4-2.9"/>',
+  tv:'<rect x="2.6" y="6.6" width="18.8" height="12" rx="2.6"/><path d="M8.2 3.4 12 6.4l3.8-3"/><path d="M10.6 10.5 14.8 12.6l-4.2 2.1z" fill="currentColor" stroke="none"/>',
+  shield:'<path d="M12 2.6 4.8 5.4v5.9c0 4.5 3 8.2 7.2 9.8 4.2-1.6 7.2-5.3 7.2-9.8V5.4z"/><path d="M9.2 11.9l2.1 2.1 3.9-4"/>',
+  dumbbell:'<path d="M3 9.2v5.6M6.2 6.8v10.4M17.8 6.8v10.4M21 9.2v5.6M6.2 12h11.6"/>',
+  utensils:'<path d="M5.4 2.6v6.6a2.4 2.4 0 0 0 4.8 0V2.6"/><path d="M7.8 9.4V21.4"/><path d="M18.2 2.6c-1.9 1.5-2.9 3.4-2.9 5.8s.9 3.4 2.9 3.9v9.1"/>',
+  stroller:'<path d="M3.6 12.4h13V9.1A6.5 6.5 0 0 0 10.1 2.6"/><path d="M3.6 12.4a6.5 6.5 0 0 0 13 0"/><path d="M6.8 17.2 8.1 14M13.9 17.2 12.6 14"/><circle cx="6.2" cy="19.1" r="1.6"/><circle cx="14.4" cy="19.1" r="1.6"/>',
+  coins:'<ellipse cx="12" cy="6.4" rx="6.8" ry="2.9"/><path d="M5.2 6.4v5c0 1.6 3 2.9 6.8 2.9s6.8-1.3 6.8-2.9v-5"/><path d="M5.2 11.4v5c0 1.6 3 2.9 6.8 2.9s6.8-1.3 6.8-2.9v-5"/>',
+  card:'<rect x="2.6" y="5.2" width="18.8" height="13.6" rx="2.6"/><path d="M2.6 10.1h18.8"/><path d="M6.2 14.8h4.2"/>',
+  receipt:'<path d="M5.6 2.6h12.8v18.8l-2.15-1.45-2.15 1.45-2.1-1.45-2.15 1.45-2.1-1.45L5.6 21.4z"/><path d="M9 8.2h6M9 12.1h6"/>',
+  lifebuoy:'<circle cx="12" cy="12" r="8.6"/><circle cx="12" cy="12" r="3.5"/><path d="M6 6l3.5 3.5M18 6l-3.5 3.5M6 18l3.5-3.5M18 18l-3.5-3.5"/>',
+  plane:'<path d="M21 15.4 13.4 11.9V5.1a1.45 1.45 0 0 0-2.9 0v6.8L3 15.4v2.1l7.5-2.2v3.4L8 20.5v1.5l4-1.15 4 1.15v-1.5l-2.5-1.75v-3.4L21 17.5z"/>',
+  car:'<path d="M4.2 15.4l1.7-5.8a2 2 0 0 1 1.95-1.5h8.3a2 2 0 0 1 1.95 1.5l1.7 5.8"/><path d="M3.8 15.4h16.4"/><path d="M5.8 15.4v3.3h3v-3.3M15.2 15.4v3.3h3v-3.3"/><circle cx="7.6" cy="12.7" r=".95" fill="currentColor" stroke="none"/><circle cx="16.4" cy="12.7" r=".95" fill="currentColor" stroke="none"/>',
+  gift:'<rect x="3.2" y="8.4" width="17.6" height="4.1" rx="1.2"/><path d="M4.9 12.5v8.9h14.2v-8.9"/><path d="M12 8.4v13"/><path d="M12 8.4S9.6 8.5 8.4 7.3a2.25 2.25 0 0 1 3.15-3.15C12.7 5.3 12 8.4 12 8.4Z"/><path d="M12 8.4s2.4.1 3.6-1.1a2.25 2.25 0 0 0-3.15-3.15C11.3 5.3 12 8.4 12 8.4Z"/>',
+  diamond:'<path d="M6.2 3.2h11.6l3.4 5.4L12 20.8 2.8 8.6z"/><path d="M2.8 8.6h18.4"/><path d="M9.2 3.2 7.6 8.6 12 20.8l4.4-12.2-1.6-5.4"/>',
+  cap:'<path d="M2.6 8.6 12 4.6l9.4 4-9.4 4z"/><path d="M6.6 11v5c0 1.35 2.4 2.45 5.4 2.45s5.4-1.1 5.4-2.45v-5"/><path d="M21.4 8.6v5.2"/>',
+  laptop:'<rect x="4.2" y="5.2" width="15.6" height="10" rx="1.8"/><path d="M2.2 18.4h19.6"/>',
+  heart:'<path d="M20.3 6.7a4.55 4.55 0 0 0-6.9-.6L12 7.4l-1.4-1.3a4.55 4.55 0 0 0-6.9 5.9l7 7.2a2 2 0 0 0 2.8 0l6.9-7.2a4.55 4.55 0 0 0-.1-5.3Z"/>',
+  sofa:'<path d="M4.6 11.2V8.1a2 2 0 0 1 2-2h10.8a2 2 0 0 1 2 2v3.1"/><path d="M2.6 13.2a2 2 0 0 1 4 0v2.2h10.8v-2.2a2 2 0 0 1 4 0v5.6H2.6z"/>',
+  target:'<circle cx="12" cy="12" r="8.6"/><circle cx="12" cy="12" r="4.4"/><circle cx="12" cy="12" r="1.1" fill="currentColor" stroke="none"/>',
+  note:'<rect x="2.6" y="6.2" width="18.8" height="11.6" rx="2.4"/><circle cx="12" cy="12" r="2.5"/><path d="M6.2 9.6v4.8M17.8 9.6v4.8"/>'
+};
+function glyphSvg(name, size, color){
+  const s = document.createElement("span");
+  s.className = "pf-gl"; s.style.width = size+"px"; s.style.height = size+"px";
+  if (color) s.style.color = color;
+  s.innerHTML = '<svg viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">' + (GLYPH[name] || GLYPH.target) + '</svg>';
+  return s;
+}
 
 const SVG = {
   plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
@@ -45,6 +86,8 @@ const SVG = {
   cloud:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19a4.5 4.5 0 0 0 .5-9 6 6 0 0 0-11.6-1.5A4 4 0 0 0 6.5 19Z"/></svg>',
   rotate:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>',
   download:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14"/></svg>',
+  up:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5m0 0-6 6m6-6 6 6"/></svg>',
+  down:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14m0 0 6-6m-6 6-6-6"/></svg>',
   upload:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V9m0 0 4 4m-4-4-4 4M5 3h14"/></svg>'
 };
 
@@ -115,19 +158,25 @@ function makeDefaults(){
     ],
     shifts: [], paid: {},
     goals: [
-      { id: uid(), emoji: "\uD83D\uDEDF", name: "Emergency fund", target: 3000, saved: 750, color: "#3F9D8A", targetDate: null },
-      { id: uid(), emoji: "\u2708\uFE0F", name: "Holiday", target: 1500, saved: 420, color: "#5C7AA8", targetDate: SEED_BY }
+      { id: uid(), glyph: "lifebuoy", name: "Emergency fund", target: 3000, saved: 750, color: "#00C48C", targetDate: null },
+      { id: uid(), glyph: "plane", name: "Holiday", target: 1500, saved: 420, color: "#6D28D9", targetDate: SEED_BY }
     ],
-    history: [], lastCycleId: null, updatedAt: 0
+    history: [], lastCycleId: null, carryOver: true, updatedAt: 0
   };
 }
-function blank(){ return { salary:0, currency:"\u00A3", payDay:25, expenses:[], shifts:[], paid:{}, goals:[], history:[], lastCycleId:null, updatedAt:0 }; }
+function blank(){ return { salary:0, currency:"\u00A3", payDay:25, expenses:[], shifts:[], paid:{}, goals:[], history:[], lastCycleId:null, carryOver:true, updatedAt:0 }; }
 function normalize(o){
   const s = Object.assign(blank(), o || {});
   ["expenses","shifts","goals","history"].forEach(function(k){ if (!Array.isArray(s[k])) s[k] = []; });
   if (!s.paid || typeof s.paid !== "object") s.paid = {};
   if (!s.currency) s.currency = "\u00A3";
   if (!s.payDay) s.payDay = 25;
+  if (typeof s.carryOver !== "boolean") s.carryOver = true;
+  s.goals = s.goals.map(function(g){
+    if (!g.glyph) g.glyph = (g.emoji && EMOJI_MAP[g.emoji]) ? EMOJI_MAP[g.emoji] : "target";
+    if (GOAL_COLORS.indexOf(g.color) < 0) g.color = GOAL_COLORS[0];
+    return g;
+  });
   return s;
 }
 function loadLocal(){ try { const raw = localStorage.getItem(LS_KEY); if (raw) return normalize(JSON.parse(raw)); } catch(e){} return makeDefaults(); }
@@ -143,11 +192,25 @@ const sync = { status: "unconfigured", last: null };
 function cyc(){ return getCycle(state.payDay || 25, NOW); }
 function cycleShifts(){ const C = cyc(); return state.shifts.filter(function(s){ const t = new Date(s.date+"T00:00:00").getTime(); return t >= C.start.getTime() && t < C.end.getTime(); }); }
 function bankTotal(){ return cycleShifts().reduce(function(a,s){ return a+(s.amount||0); }, 0); }
-function income(){ return (state.salary||0) + bankTotal(); }
+function shiftCycleId(id, delta){
+  const p = id.split("-").map(Number); let y = p[0], m = p[1] - 1 + delta;
+  y += Math.floor(m / 12); m = ((m % 12) + 12) % 12;
+  return y + "-" + String(m + 1).padStart(2, "0");
+}
+function histFor(id){ return state.history.filter(function(x){ return x.cycleId === id; })[0] || null; }
+/* what last cycle finished with, carried into this one */
+function carriedOver(){
+  if (!state.carryOver) return 0;
+  const prev = histFor(shiftCycleId(cyc().id, -1));
+  return prev ? (prev.saved || 0) : 0;
+}
+function income(){ return (state.salary||0) + bankTotal() + carriedOver(); }
+/* net for this cycle alone, ignoring anything carried in */
+function ownSaved(){ return remaining() - carriedOver(); }
 function expTotal(){ return state.expenses.reduce(function(a,e){ return a+(e.amount||0); }, 0); }
 function remaining(){ return income() - expTotal(); }
 function pctRemain(){ const i = income(); return i > 0 ? remaining()/i : 0; }
-function ringColor(){ const r = remaining(), i = income(); return r < 0 ? "#E08A74" : (i > 0 && r/i < 0.15) ? "#E2B45E" : "#5FD0B6"; }
+function ringColor(){ const r = remaining(), i = income(); return r < 0 ? "#FF6B8A" : (i > 0 && r/i < 0.15) ? "#FFC53D" : "#2DE1A8"; }
 const pk = (id) => cyc().id + "__" + id;
 function monthlySavings(){ return state.expenses.filter(function(e){ return e.category==="savings"; }).reduce(function(a,e){ return a+(e.amount||0); }, 0); }
 
@@ -163,21 +226,34 @@ function delGoal(id){ state.goals = state.goals.filter(function(x){ return x.id!
 function addContribution(id, amt){ const g = state.goals.find(function(x){ return x.id===id; }); if (g) g.saved = round2((g.saved||0)+amt); commit(); }
 function addHistory(rec){ state.history = state.history.filter(function(x){ return x.cycleId!==rec.cycleId; }); state.history.push(rec); commit(); }
 function delHistory(cycleId){ state.history = state.history.filter(function(x){ return x.cycleId!==cycleId; }); commit(); }
-function doReset(){ state = makeDefaults(); state.updatedAt = Date.now(); persistLocal(); renderApp(); pushSoon(); closeSheet(); toast("Reset to starter setup"); }
+function doReset(){ state = makeDefaults(); state.lastCycleId = getCycle(state.payDay||25, NOW).id; state.updatedAt = Date.now(); persistLocal(); renderApp(); pushSoon(); closeSheet(); toast("Reset to starter setup"); }
 
+function archiveCycle(id){
+  if (state.history.some(function(x){ return x.cycleId === id; })) return;
+  const p = id.split("-").map(Number), Y = p[0], M = p[1], pd = state.payDay || 25;
+  const start = new Date(Y, M - 1, pd), end = new Date(Y, M, pd);
+  const shiftsTotal = state.shifts.reduce(function(a, s){
+    const t = new Date(s.date + "T00:00:00").getTime();
+    return (t >= start.getTime() && t < end.getTime()) ? a + (s.amount || 0) : a;
+  }, 0);
+  const expenses = state.expenses.reduce(function(a, e){ return a + (e.amount || 0); }, 0);
+  const prev = histFor(shiftCycleId(id, -1));
+  const carriedIn = (state.carryOver && prev) ? (prev.saved || 0) : 0;
+  const inc = (state.salary || 0) + shiftsTotal + carriedIn;
+  state.history.push({
+    cycleId: id, label: start.toLocaleDateString("en-GB", { month: "short", year: "numeric" }),
+    income: inc, expenses: expenses, saved: inc - expenses,
+    salary: state.salary || 0, shiftsTotal: shiftsTotal, carriedIn: carriedIn, auto: true
+  });
+}
 function archiveIfRolled(){
-  const curId = getCycle(state.payDay||25, NOW).id;
+  const curId = getCycle(state.payDay || 25, NOW).id;
   if (!state.lastCycleId){ state.lastCycleId = curId; persistLocal(); return; }
   if (state.lastCycleId === curId) return;
-  if (!state.history.some(function(x){ return x.cycleId===state.lastCycleId; })){
-    const parts = state.lastCycleId.split("-").map(Number); const Y = parts[0], M = parts[1];
-    const start = new Date(Y, M-1, state.payDay||25), end = new Date(Y, M, state.payDay||25);
-    const shiftsTotal = state.shifts.reduce(function(a,s){ const t=new Date(s.date+"T00:00:00").getTime(); return (t>=start.getTime()&&t<end.getTime())?a+(s.amount||0):a; }, 0);
-    const expenses = state.expenses.reduce(function(a,e){ return a+(e.amount||0); }, 0);
-    const inc = (state.salary||0)+shiftsTotal;
-    const label = start.toLocaleDateString("en-GB",{month:"short",year:"numeric"});
-    state.history.push({ cycleId: state.lastCycleId, label: label, income: inc, expenses: expenses, saved: inc-expenses, salary: state.salary||0, shiftsTotal: shiftsTotal });
-  }
+  /* close off every cycle between the last one we saw and today */
+  let id = state.lastCycleId, guard = 0;
+  while (id !== curId && guard++ < 240){ archiveCycle(id); id = shiftCycleId(id, 1); }
+  state.history.sort(function(a, b){ return a.cycleId < b.cycleId ? -1 : 1; });
   state.lastCycleId = curId; state.updatedAt = Date.now(); persistLocal();
 }
 
@@ -271,10 +347,21 @@ function renderApp(){
   const incomeCard = h("section",{class:"pf-card"});
   incomeCard.appendChild(cardHead("Income", money2(income()), "pf-pos"));
   incomeCard.appendChild(h("div",{class:"pf-exp", role:"button", tabindex:"0", onClick:openSalary, onKeydown:onKey(openSalary)},
-    h("span",{class:"pf-ic", style:{background:tint("#3F9D8A",0.14)}}, "\uD83D\uDCB7"),
+    h("span",{class:"pf-ic", style:{background:tint("#00C48C",0.15)}}, glyphSvg("note",21,"#00A578")),
     h("div",{class:"pf-expmid"}, h("span",{class:"pf-expname"},"Monthly salary"), h("span",{class:"pf-expcat"},"Paid on the "+ordinal(state.payDay)+" \u00B7 take-home")),
     h("span",{class:"pf-expamt"}, money2(state.salary))
   ));
+  const carried = carriedOver();
+  if (carried !== 0){
+    const prevLbl = (histFor(shiftCycleId(C.id,-1))||{}).label || "last cycle";
+    incomeCard.appendChild(h("div",{class:"pf-exp", role:"button", tabindex:"0", onClick:openSettings, onKeydown:onKey(openSettings)},
+      h("span",{class:"pf-ic", style:{background:tint("#6D28D9",0.14)}}, glyphSvg("coins",20,"#6D28D9")),
+      h("div",{class:"pf-expmid"},
+        h("span",{class:"pf-expname"},"Carried over"),
+        h("span",{class:"pf-expcat"}, "What was left at the end of "+prevLbl)),
+      h("span",{class:"pf-expamt "+(carried>=0?"pf-pos":"pf-neg")}, (carried>=0?"+":"")+money2(carried))
+    ));
+  }
   incomeCard.appendChild(h("div",{class:"pf-subhead"},
     h("span",{class:"pf-subtitle"}, "Bank shifts ", h("span",{class:"pf-count"}, String(shifts.length))),
     h("span",{class:"pf-pos pf-subtot"}, "+"+money2(bankTotal()))
@@ -283,7 +370,7 @@ function renderApp(){
   if (shifts.length){
     shifts.forEach(function(s){
       shiftList.appendChild(h("div",{class:"pf-exp", role:"button", tabindex:"0", onClick:function(){ openShift(s); }, onKeydown:onKey(function(){ openShift(s); })},
-        h("span",{class:"pf-ic pf-ic--bank"}, "\uD83C\uDFE6"),
+        h("span",{class:"pf-ic pf-ic--bank"}, glyphSvg("landmark",20,"#00A578")),
         h("div",{class:"pf-expmid"},
           h("span",{class:"pf-expname"}, s.label || "Bank shift"),
           h("span",{class:"pf-expcat"}, new Date(s.date+"T00:00:00").toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"}) + ((s.hours&&s.rate) ? " \u00B7 "+s.hours+"h \u00D7 "+CUR()+s.rate : ""))
@@ -315,7 +402,7 @@ function renderApp(){
       }
       const fill = h("div",{class:"pf-goalfill", style:{background:g.color}}); growW(fill, pct);
       const row = h("div",{class:"pf-goalrow", role:"button", tabindex:"0", onClick:function(){ openGoal(g); }, onKeydown:onKey(function(){ openGoal(g); })},
-        h("span",{class:"pf-goalemoji", style:{background:tint(g.color,0.14)}}, g.emoji),
+        h("span",{class:"pf-goalemoji", style:{background:tint(g.color,0.15)}}, glyphSvg(g.glyph,22,g.color)),
         h("div",{class:"pf-goalmid"},
           h("div",{class:"pf-goaltop"},
             h("span",{class:"pf-goalname"}, g.name),
@@ -361,7 +448,7 @@ function renderApp(){
       const chk = h("button",{class:"pf-check"+(isPaid?" pf-check--on":""), "aria-label":isPaid?"Mark as not paid":"Mark as paid", onClick:function(ev){ ev.stopPropagation(); togglePaid(e.id); }});
       if (isPaid) chk.appendChild(icon("check",14));
       expList.appendChild(h("div",{class:"pf-exp"+(isPaid?" pf-exp--paid":""), role:"button", tabindex:"0", onClick:function(){ openExpense(e); }, onKeydown:onKey(function(){ openExpense(e); })},
-        h("span",{class:"pf-ic", style:{background:tint(c.color,0.16)}}, c.emoji),
+        h("span",{class:"pf-ic", style:{background:tint(c.color,0.15)}}, glyphSvg(c.glyph,21,c.color)),
         h("div",{class:"pf-expmid"}, h("span",{class:"pf-expname"}, e.name), h("span",{class:"pf-expcat"}, c.label)),
         h("span",{class:"pf-expamt"}, money2(e.amount)),
         chk
@@ -387,6 +474,26 @@ function renderApp(){
     h("h2",{class:"pf-cardtitle"},"Month-to-month"),
     h("span",{class:"pf-histlegend"}, h("i",{class:"pf-dot pf-dot--in"}), "In", h("i",{class:"pf-dot pf-dot--out"}), "Out")
   ));
+  const lastRec = histFor(shiftCycleId(C.id,-1));
+  const thisOwn = ownSaved();
+  if (lastRec){
+    const lastOwn = (lastRec.saved||0) - (lastRec.carriedIn||0);
+    const delta = thisOwn - lastOwn;
+    const better = delta >= 0;
+    histCard.appendChild(h("div",{class:"pf-vs"},
+      h("div",{class:"pf-vscol"},
+        h("span",{class:"pf-vslab"}, lastRec.label),
+        h("span",{class:"pf-vsval "+(lastOwn>=0?"pf-pos":"pf-neg")}, money0(lastOwn)),
+        h("span",{class:"pf-vssub"},"saved")
+      ),
+      h("div",{class:"pf-vsmid"}, h("span",{class:"pf-vschip "+(better?"pf-vschip--up":"pf-vschip--down")}, icon(better?"up":"down",13), (better?"+":"\u2212")+money0(Math.abs(delta)).replace("-",""))),
+      h("div",{class:"pf-vscol"},
+        h("span",{class:"pf-vslab"},"This cycle"),
+        h("span",{class:"pf-vsval "+(thisOwn>=0?"pf-pos":"pf-neg")}, money0(thisOwn)),
+        h("span",{class:"pf-vssub"}, isPayday?"so far":daysToPay+" days to go")
+      )
+    ));
+  }
   const chart = h("div",{class:"pf-chart"});
   chartMonths.forEach(function(m){
     const ih = Math.round(((m.income||0)/chartMax)*108), eh = Math.round(((m.expenses||0)/chartMax)*108);
@@ -466,7 +573,7 @@ function openExpense(existing){
     CAT_ORDER.forEach(function(k){
       const c = CAT[k]; const sel = k===cat;
       const chip = h("button",{type:"button", class:"pf-catchip"+(sel?" pf-catchip--on":""), onClick:function(){ cat=k; if (!name.value.trim()) name.value=c.label; paint(); }},
-        h("span",{class:"pf-catic", style:{background:tint(c.color,0.16), color:c.color}}, c.emoji),
+        h("span",{class:"pf-catic", style:{background:tint(c.color,0.15)}}, glyphSvg(c.glyph,19,c.color)),
         h("span",{class:"pf-catlab"}, c.label));
       if (sel){ chip.style.borderColor = c.color; chip.style.background = tint(c.color,0.10); }
       grid.appendChild(chip);
@@ -509,7 +616,7 @@ function openShift(existing){
 }
 
 function openGoal(existing){
-  let emoji = existing?existing.emoji:"\uD83D\uDC37";
+  let glyph = existing?existing.glyph:"target";
   let color = existing?existing.color:GOAL_COLORS[0];
   const name = h("input",{class:"pf-input", placeholder:"e.g. Emergency fund", value: existing?existing.name:""});
   const target = amtInput(existing?existing.target:"");
@@ -517,14 +624,14 @@ function openGoal(existing){
   const by = h("input",{class:"pf-input", type:"month", value: (existing&&existing.targetDate)?existing.targetDate:""});
   const egrid = h("div",{class:"pf-emojigrid"});
   const crow = h("div",{class:"pf-colorrow"});
-  function paintE(){ egrid.innerHTML=""; GOAL_EMOJI.forEach(function(e){ const sel=e===emoji; const b=h("button",{type:"button", class:"pf-emoji"+(sel?" pf-emoji--on":""), onClick:function(){ emoji=e; paintE(); }}, e); if (sel){ b.style.borderColor=color; b.style.background=tint(color,0.12); } egrid.appendChild(b); }); }
+  function paintE(){ egrid.innerHTML=""; GOAL_GLYPHS.forEach(function(e){ const sel=e===glyph; const b=h("button",{type:"button", class:"pf-emoji"+(sel?" pf-emoji--on":""), onClick:function(){ glyph=e; paintE(); }}, glyphSvg(e,21,sel?color:"#8A93A8")); if (sel){ b.style.borderColor=color; b.style.background=tint(color,0.12); } egrid.appendChild(b); }); }
   function paintC(){ crow.innerHTML=""; GOAL_COLORS.forEach(function(c){ const sel=c===color; const b=h("button",{type:"button", class:"pf-swatch"+(sel?" pf-swatch--on":""), style:{background:c}, "aria-label":"Pick colour", onClick:function(){ color=c; paintE(); paintC(); }}); crow.appendChild(b); }); }
   paintE(); paintC();
   const act = h("div",{class:"pf-actions"});
   if (existing) act.appendChild(dangerBtn(function(){ delGoal(existing.id); closeSheet(); }));
   act.appendChild(primaryBtn("Save", function(){
     const nm = name.value.trim(); const t = parseFloat(target._input.value); if (!nm || !(t>0)) return;
-    upsertGoal({ id: existing?existing.id:uid(), emoji:emoji, name:nm, color:color, target:Math.max(0,t||0), saved:Math.max(0,parseFloat(saved._input.value)||0), targetDate:by.value||null }); closeSheet();
+    upsertGoal({ id: existing?existing.id:uid(), glyph:glyph, name:nm, color:color, target:Math.max(0,t||0), saved:Math.max(0,parseFloat(saved._input.value)||0), targetDate:by.value||null }); closeSheet();
   }));
   openSheet(existing?"Edit goal":"New savings goal", h("div",{},
     field("Icon", egrid),
@@ -550,7 +657,7 @@ function openContrib(goal){
   const quick = h("div",{class:"pf-quickrow"});
   [50,100,200].forEach(function(q){ quick.appendChild(h("button",{type:"button", class:"pf-quick", onClick:function(){ amt._input.value=String(round2((parseFloat(amt._input.value)||0)+q)); upd(); }}, "+"+CUR()+q)); });
   quick.appendChild(h("button",{type:"button", class:"pf-quick", onClick:function(){ amt._input.value=""; upd(); }}, "Clear"));
-  const help = h("p",{class:"pf-help"}); help.appendChild(document.createTextNode("Adding to ")); help.appendChild(h("strong",{}, goal.emoji+" "+goal.name)); help.appendChild(document.createTextNode(" \u2014 currently "+CUR()+Math.round(goal.saved||0).toLocaleString("en-GB")+" of "+CUR()+Math.round(goal.target||0).toLocaleString("en-GB")+"."));
+  const help = h("p",{class:"pf-help"}); help.appendChild(document.createTextNode("Adding to ")); help.appendChild(h("strong",{}, goal.name)); help.appendChild(document.createTextNode(" \u2014 currently "+CUR()+Math.round(goal.saved||0).toLocaleString("en-GB")+" of "+CUR()+Math.round(goal.target||0).toLocaleString("en-GB")+"."));
   const fAmt = field("Amount to add", amt); fAmt.appendChild(quick);
   openSheet("Add to savings", h("div",{}, help, fAmt, preview, actions(primaryBtn("Add to savings", function(){ const a=round2(parseFloat(amt._input.value)||0); if (!(a>0)) return; addContribution(goal.id, a); closeSheet(); }))));
 }
@@ -582,6 +689,7 @@ function openHistView(m){
   const content = h("div",{},
     h("div",{class:"pf-histdetail"},
       h("div",{class:"pf-hdrow"}, h("span",{},"Money in"), h("strong",{class:"pf-pos"}, money2(m.income))),
+      (m.carriedIn ? h("div",{class:"pf-hdrow"}, h("span",{},"\u2014 of which carried in"), h("strong",{class:"pf-muted2"}, money2(m.carriedIn))) : null),
       h("div",{class:"pf-hdrow"}, h("span",{},"Money out"), h("strong",{}, money2(m.expenses))),
       h("div",{class:"pf-hdrow pf-hdrow--tot"}, h("span",{},"Saved"), h("strong",{class:(m.saved||0)>=0?"pf-pos":"pf-neg"}, money0(m.saved)))
     ),
@@ -614,6 +722,11 @@ function openSettings(){
   const payday = h("input",{class:"pf-input", type:"number", min:"1", max:"28", inputmode:"numeric", value:String(state.payDay)});
   const curIn = h("input",{class:"pf-input", maxlength:"3", value:state.currency});
   const saveBtn = primaryBtn("Save", function(){ state.payDay = clamp(parseInt(payday.value,10)||25,1,28); state.currency = (curIn.value.trim()||"\u00A3"); commit(); closeSheet(); });
+  const toggle = h("button",{class:"pf-toggle"+(state.carryOver?" pf-toggle--on":""), role:"switch", "aria-checked":state.carryOver?"true":"false"}, h("span",{class:"pf-knob"}));
+  toggle.addEventListener("click", function(){ state.carryOver = !state.carryOver; toggle.className = "pf-toggle"+(state.carryOver?" pf-toggle--on":""); toggle.setAttribute("aria-checked", state.carryOver?"true":"false"); commit(); });
+  const carryRow = h("div",{class:"pf-toggrow"},
+    h("div",{}, h("span",{class:"pf-toglab"},"Carry over what's left"), h("span",{class:"pf-hint"},"Adds last cycle's leftover to this cycle's income.")),
+    toggle);
 
   /* sync box */
   const clientIn = h("input",{class:"pf-input", placeholder:"Paste your Google client ID", value: localStorage.getItem(LS_CLIENT)||""});
@@ -685,6 +798,7 @@ function openSettings(){
   openSheet("Settings", h("div",{},
     field("Payday \u2014 the day everything resets", payday, "Your cycle runs from this day to the day before it, next month."),
     field("Currency symbol", curIn),
+    carryRow,
     actions(saveBtn),
     h("div",{style:{height:"6px"}}),
     syncBox,
