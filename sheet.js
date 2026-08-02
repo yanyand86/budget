@@ -94,8 +94,11 @@ function normalize(o){
   if (!s.payDay) s.payDay = 25;
   if (typeof s.carryOver !== "boolean") s.carryOver = true;
   const dd = s.deductions || {};
-  s.deductions = { on: typeof dd.on === "boolean" ? dd.on : true,
-    tax: dd.tax != null ? dd.tax : 20, ni: dd.ni != null ? dd.ni : 8, pension: dd.pension != null ? dd.pension : 0 };
+  let nm = dd.niMode; if (!nm) nm = (dd.ni === 2) ? "upper" : (dd.ni === 0) ? "off" : "main";
+  s.deductions = { on: typeof dd.on === "boolean" ? dd.on : true, tax: dd.tax != null ? dd.tax : 20,
+    niMode: nm, niFreq: dd.niFreq || "weekly",
+    pensionOn: typeof dd.pensionOn === "boolean" ? dd.pensionOn : !!(dd.pension > 0),
+    pension: (dd.pension != null && dd.pension > 0) ? dd.pension : 9.8 };
   s.shifts = s.shifts.map(function(x){ if (x.gross == null) x.gross = x.amount || 0; return x; });
   s.goals = s.goals.map(function(g){
     if (!g.glyph) g.glyph = (g.emoji && EMOJI_MAP[g.emoji]) ? EMOJI_MAP[g.emoji] : "target";
@@ -119,16 +122,66 @@ function bankTotal(){ return state.shifts.filter(inCycle).reduce(function(a,s){ 
 function histFor(id){ return state.history.filter(function(x){ return x.cycleId === id; })[0] || null; }
 function carriedOver(){ if (!state.carryOver) return 0; const p = histFor(shiftCycleId(cyc().id,-1)); return p ? (p.saved||0) : 0; }
 function income(){ return (state.salary||0) + bankTotal() + carriedOver(); }
-function netFromGross(gross, d){
-  gross = Math.max(0, gross||0); d = d || {tax:0,ni:0,pension:0};
+const NI_THRESH = {
+  weekly:      { pt:242,  uel:967,  label:"week" },
+  fortnightly: { pt:484,  uel:1934, label:"fortnight" },
+  fourweekly:  { pt:968,  uel:3868, label:"4 weeks" },
+  monthly:     { pt:1048, uel:4189, label:"month" }
+};
+const EPOCH_MON = Date.UTC(1970,0,5);
+function niPeriodKey(dateStr, freq){
+  const d = new Date((dateStr||"")+"T00:00:00");
+  if (isNaN(d.getTime())) return "na";
+  if (freq === "monthly") return "m-" + d.getFullYear() + "-" + (d.getMonth()+1);
+  const back = (d.getDay()+6)%7;
+  const mon = Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()-back);
+  const span = freq === "fortnightly" ? 14 : freq === "fourweekly" ? 28 : 7;
+  return freq + "-" + Math.floor((mon - EPOCH_MON) / (86400000 * span));
+}
+function niOnPeriod(gross, d){
+  gross = Math.max(0, gross||0);
+  if (!d || d.niMode === "off") return 0;
+  if (d.niMode === "upper") return round2(gross * 0.02);
+  const t = NI_THRESH[d.niFreq] || NI_THRESH.weekly;
+  return round2(Math.max(0, Math.min(gross,t.uel) - t.pt)*0.08 + Math.max(0, gross - t.uel)*0.02);
+}
+function activeDed(){
+  const d = state.deductions || {};
+  if (!d.on) return { on:false, tax:0, niMode:"off", niFreq:d.niFreq||"weekly", pension:0 };
+  return { on:true, tax:d.tax||0, niMode:d.niMode||"main", niFreq:d.niFreq||"weekly", pension: d.pensionOn ? (d.pension||0) : 0 };
+}
+function breakdownFor(gross, otherInPeriod, d){
+  gross = Math.max(0, gross||0); otherInPeriod = Math.max(0, otherInPeriod||0);
   const pension = round2(gross*(d.pension||0)/100);
   const tax = round2(Math.max(0, gross-pension)*(d.tax||0)/100);
-  const ni = round2(gross*(d.ni||0)/100);
+  const ni = round2(niOnPeriod(otherInPeriod+gross, d) - niOnPeriod(otherInPeriod, d));
   return { gross:gross, pension:pension, tax:tax, ni:ni, total:round2(pension+tax+ni), net:round2(gross-pension-tax-ni) };
 }
-function activeDed(){ const d = state.deductions||{}; return d.on ? {tax:d.tax||0, ni:d.ni||0, pension:d.pension||0} : {tax:0,ni:0,pension:0}; }
-function applyShift(r){ const x = netFromGross(r.gross||0, activeDed()); r.amount = x.net; r.ded = activeDed(); }
-function recalcShifts(){ state.shifts.forEach(applyShift); }
+function recalcShifts(){
+  const d = activeDed(); const groups = {};
+  state.shifts.forEach(function(s){
+    if (s.gross == null) s.gross = s.amount||0;
+    const k = niPeriodKey(s.date, d.niFreq);
+    (groups[k] = groups[k]||[]).push(s);
+  });
+  Object.keys(groups).forEach(function(k){
+    const rows = groups[k];
+    const total = rows.reduce(function(a,s){ return a+(s.gross||0); },0);
+    const niTotal = niOnPeriod(total, d);
+    let alloc = 0;
+    rows.forEach(function(s,i){
+      const pension = round2((s.gross||0)*(d.pension||0)/100);
+      const tax = round2(Math.max(0,(s.gross||0)-pension)*(d.tax||0)/100);
+      let ni;
+      if (i === rows.length-1) ni = round2(niTotal - alloc);
+      else { ni = round2(total>0 ? niTotal*((s.gross||0)/total) : 0); alloc = round2(alloc+ni); }
+      s.pensionAmt = pension; s.taxAmt = tax; s.niAmt = ni;
+      s.amount = round2((s.gross||0) - pension - tax - ni);
+      s.ded = { tax:d.tax, niMode:d.niMode, niFreq:d.niFreq, pension:d.pension };
+    });
+  });
+}
+function applyShift(){ recalcShifts(); }
 function grossTotal(){ return state.shifts.filter(inCycle).reduce(function(a,x){ return a+(x.gross!=null?x.gross:x.amount||0); },0); }
 function monthsBetween(a,b){ const x=a.split("-").map(Number), y=b.split("-").map(Number); return (y[0]*12+(y[1]-1))-(x[0]*12+(x[1]-1)); }
 function expActiveIn(e, cycleId){ return !e.endsOn || e.endsOn >= (cycleId || cyc().id); }
@@ -686,9 +739,16 @@ function setupPanel(){
     s2.addEventListener("change", function(){ onch(parseFloat(s2.value)||0); });
     return s2;
   }
-  const TAX_OPTS = [ {v:0,l:"None"}, {v:20,l:"20% \u2014 basic"}, {v:40,l:"40% \u2014 higher"}, {v:45,l:"45% \u2014 additional"} ];
-  const NI_OPTS  = [ {v:0,l:"None"}, {v:8,l:"8% \u2014 main"}, {v:2,l:"2% \u2014 above upper limit"} ];
-  const PEN_OPTS = [ {v:0,l:"Not pensionable"}, {v:5.2,l:"5.2%"}, {v:6.5,l:"6.5%"}, {v:8.3,l:"8.3%"}, {v:9.8,l:"9.8%"}, {v:10.7,l:"10.7%"}, {v:12.5,l:"12.5%"} ];
+  const TAX_OPTS = [ {v:0,l:"None"}, {v:20,l:"20% \u2014 basic / BR"}, {v:40,l:"40% \u2014 higher"}, {v:45,l:"45% \u2014 additional"} ];
+  const PEN_OPTS = [ {v:5.2,l:"5.2%"}, {v:6.5,l:"6.5%"}, {v:8.3,l:"8.3%"}, {v:9.8,l:"9.8%"}, {v:10.7,l:"10.7%"}, {v:12.5,l:"12.5%"} ];
+  function selS(opts, cur, onch){ const s2=el("select",{});
+    opts.forEach(function(o){ const op=el("option",{value:String(o.v)},o.l); if(String(o.v)===String(cur)) op.selected=true; s2.appendChild(op); });
+    s2.addEventListener("change", function(){ onch(s2.value); }); return s2; }
+  const NIMODE_OPTS = [ {v:"main",l:"Standard \u2014 8% above threshold"}, {v:"upper",l:"2% flat"}, {v:"off",l:"None"} ];
+  const FREQ_OPTS = [ {v:"weekly",l:"Weekly"}, {v:"fortnightly",l:"Fortnightly"}, {v:"fourweekly",l:"Every 4 weeks"}, {v:"monthly",l:"Monthly"} ];
+  const penOnOff = el("select",{}, el("option",{value:"off"},"Off \u2014 not pensionable"), el("option",{value:"on"},"On"));
+  penOnOff.value = state.deductions.pensionOn ? "on" : "off";
+  penOnOff.addEventListener("change", function(){ state.deductions.pensionOn = penOnOff.value==="on"; recalcShifts(); commit(); renderAll(); });
   const onOff = el("select",{}, el("option",{value:"on"},"On \u2014 deduct tax, NI, pension"), el("option",{value:"off"},"Off \u2014 use amounts as entered"));
   onOff.value = state.deductions.on ? "on" : "off";
   onOff.addEventListener("change", function(){ state.deductions.on = onOff.value === "on"; recalcShifts(); commit(); renderAll(); });
@@ -714,8 +774,10 @@ function setupPanel(){
       fld("Carry over leftovers", carry, "Adds last cycle's remainder to this cycle's income."),
       fld("Bank shift take-home", onOff, "Turns gross shift pay into what reaches your bank."),
       fld("Income tax on extra earnings", sel(TAX_OPTS, state.deductions.tax, function(v){ state.deductions.tax=v; recalcShifts(); commit(); renderAll(); }), "Your marginal rate."),
-      fld("National Insurance", sel(NI_OPTS, state.deductions.ni, function(v){ state.deductions.ni=v; recalcShifts(); commit(); renderAll(); })),
-      fld("NHS pension on bank pay", sel(PEN_OPTS, state.deductions.pension, function(v){ state.deductions.pension=v; recalcShifts(); commit(); renderAll(); }), "Taken before income tax.")
+      fld("National Insurance", selS(NIMODE_OPTS, state.deductions.niMode, function(v){ state.deductions.niMode=v; recalcShifts(); commit(); renderAll(); })),
+      fld("How often you're paid", selS(FREQ_OPTS, state.deductions.niFreq, function(v){ state.deductions.niFreq=v; recalcShifts(); commit(); renderAll(); }), "NI is 8% only above " + money0((NI_THRESH[state.deductions.niFreq]||NI_THRESH.weekly).pt) + " per " + (NI_THRESH[state.deductions.niFreq]||NI_THRESH.weekly).label + "."),
+      fld("NHS pension on bank pay", penOnOff, "Leave off if your payslip shows PENSION CONTS 0.00."),
+      fld("Pension tier", sel(PEN_OPTS, state.deductions.pension, function(v){ state.deductions.pension=v; recalcShifts(); commit(); renderAll(); }), "Taken before income tax.")
     ),
     el("div",{class:"sh-stats"},
       stat("Income this cycle", money2(income()), "sh-pos"),
