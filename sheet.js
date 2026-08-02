@@ -93,6 +93,10 @@ function normalize(o){
   if (!s.currency) s.currency = "\u00A3";
   if (!s.payDay) s.payDay = 25;
   if (typeof s.carryOver !== "boolean") s.carryOver = true;
+  const dd = s.deductions || {};
+  s.deductions = { on: typeof dd.on === "boolean" ? dd.on : true,
+    tax: dd.tax != null ? dd.tax : 20, ni: dd.ni != null ? dd.ni : 8, pension: dd.pension != null ? dd.pension : 0 };
+  s.shifts = s.shifts.map(function(x){ if (x.gross == null) x.gross = x.amount || 0; return x; });
   s.goals = s.goals.map(function(g){
     if (!g.glyph) g.glyph = (g.emoji && EMOJI_MAP[g.emoji]) ? EMOJI_MAP[g.emoji] : "target";
     if (GOAL_COLORS.indexOf(g.color) < 0) g.color = GOAL_COLORS[0];
@@ -115,6 +119,17 @@ function bankTotal(){ return state.shifts.filter(inCycle).reduce(function(a,s){ 
 function histFor(id){ return state.history.filter(function(x){ return x.cycleId === id; })[0] || null; }
 function carriedOver(){ if (!state.carryOver) return 0; const p = histFor(shiftCycleId(cyc().id,-1)); return p ? (p.saved||0) : 0; }
 function income(){ return (state.salary||0) + bankTotal() + carriedOver(); }
+function netFromGross(gross, d){
+  gross = Math.max(0, gross||0); d = d || {tax:0,ni:0,pension:0};
+  const pension = round2(gross*(d.pension||0)/100);
+  const tax = round2(Math.max(0, gross-pension)*(d.tax||0)/100);
+  const ni = round2(gross*(d.ni||0)/100);
+  return { gross:gross, pension:pension, tax:tax, ni:ni, total:round2(pension+tax+ni), net:round2(gross-pension-tax-ni) };
+}
+function activeDed(){ const d = state.deductions||{}; return d.on ? {tax:d.tax||0, ni:d.ni||0, pension:d.pension||0} : {tax:0,ni:0,pension:0}; }
+function applyShift(r){ const x = netFromGross(r.gross||0, activeDed()); r.amount = x.net; r.ded = activeDed(); }
+function recalcShifts(){ state.shifts.forEach(applyShift); }
+function grossTotal(){ return state.shifts.filter(inCycle).reduce(function(a,x){ return a+(x.gross!=null?x.gross:x.amount||0); },0); }
 function monthsBetween(a,b){ const x=a.split("-").map(Number), y=b.split("-").map(Number); return (y[0]*12+(y[1]-1))-(x[0]*12+(x[1]-1)); }
 function expActiveIn(e, cycleId){ return !e.endsOn || e.endsOn >= (cycleId || cyc().id); }
 function activeExpenses(cycleId){ return state.expenses.filter(function(e){ return expActiveIn(e, cycleId); }); }
@@ -503,32 +518,37 @@ function shiftsPanel(){
         get:function(r){ return r.label||""; }, set:function(r,v){ r.label = v; } },
       { key:"hours", label:"Hours", type:"num", align:"r", width:"100px",
         get:function(r){ return r.hours != null ? String(r.hours) : ""; },
-        set:function(r,v){ r.hours = v === "" ? null : num(v); if (r.hours && r.rate) r.amount = round2(r.hours * r.rate); } },
+        set:function(r,v){ r.hours = v === "" ? null : num(v); if (r.hours && r.rate){ r.gross = round2(r.hours*r.rate); applyShift(r); } } },
       { key:"rate", label:"Rate / hr", type:"num", align:"r", width:"110px",
         get:function(r){ return r.rate != null ? String(r.rate) : ""; },
-        set:function(r,v){ r.rate = v === "" ? null : num(v); if (r.hours && r.rate) r.amount = round2(r.hours * r.rate); } },
-      { key:"amount", label:"Pay", type:"num", align:"r", width:"120px",
-        get:function(r){ return r.amount != null ? String(r.amount) : ""; },
-        set:function(r,v){ r.amount = Math.max(0, round2(num(v))); } },
+        set:function(r,v){ r.rate = v === "" ? null : num(v); if (r.hours && r.rate){ r.gross = round2(r.hours*r.rate); applyShift(r); } } },
+      { key:"gross", label:"Gross", type:"num", align:"r", width:"120px",
+        get:function(r){ return r.gross != null ? String(r.gross) : ""; },
+        set:function(r,v){ r.gross = Math.max(0, round2(num(v))); applyShift(r); } },
+      { key:"net", label:"Take-home", type:"calc", align:"r", width:"130px",
+        get:function(r){ return money2(r.amount||0); },
+        render:function(r){ return el("div",{class:"sh-in sh-in--num sh-pos"}, money2(r.amount||0)); } },
       { key:"cyc", label:"Cycle", type:"calc", width:"110px",
         get:function(r){ return inCycle(r) ? "this cycle" : ""; },
         render: function(r){ return el("div",{style:{padding:"11px 12px"}}, inCycle(r) ? el("span",{class:"sh-pill sh-pill--now"},"this cycle") : el("span",{style:{color:"#B0A9C4",fontSize:"12.5px"}},"\u2014")); } }
     ],
     onDelete: function(r){ state.shifts = state.shifts.filter(function(x){ return x.id !== r.id; }); },
-    addRow: function(silent){ state.shifts.push({ id:uid(), date:new Date().toISOString().slice(0,10), label:"", hours:null, rate:null, amount:0 }); if (!silent){ commit(); renderAll(); } },
+    addRow: function(silent){ state.shifts.push({ id:uid(), date:new Date().toISOString().slice(0,10), label:"", hours:null, rate:null, gross:0, amount:0 }); if (!silent){ commit(); renderAll(); } },
     empty: "No bank shifts logged.",
     foot: function(){
-      const all = state.shifts.reduce(function(a,s){ return a+(s.amount||0); },0);
+      const allGross = state.shifts.reduce(function(a,s){ return a+(s.gross!=null?s.gross:s.amount||0); },0);
+      const allNet = state.shifts.reduce(function(a,s){ return a+(s.amount||0); },0);
       return [ { text:"Totals", hint:true }, { text:"" }, { text:"" }, { text:"" },
-        { node: el("strong",{}, money2(all)), align:"r" },
-        { node: el("span",{class:"sh-pos"}, money2(bankTotal())), align:"r" } ];
+        { node: el("strong",{}, money2(allGross)), align:"r" },
+        { node: el("strong",{class:"sh-pos"}, money2(allNet)), align:"r" },
+        { node: el("span",{class:"sh-pos"}, "cycle " + money2(bankTotal())), align:"r" } ];
     }
   };
   const acts = [ csvBtn("Export CSV", function(){
-    downloadText("bank-shifts.csv", toCSV(["Date","Shift","Hours","Rate","Pay"],
-      state.shifts.map(function(s){ return [s.date, s.label, s.hours, s.rate, s.amount]; })));
+    downloadText("bank-shifts.csv", toCSV(["Date","Shift","Hours","Rate","Gross","Take-home"],
+      state.shifts.map(function(s){ return [s.date, s.label, s.hours, s.rate, (s.gross!=null?s.gross:s.amount), s.amount]; })));
   }) ];
-  return panelCard("Bank shifts", "Enter hours and rate and the pay fills itself in. Only shifts inside the current cycle count towards this month's income.",
+  return panelCard("Bank shifts", "Enter gross pay (or hours \u00D7 rate) \u2014 take-home is worked out from your deduction settings. Only shifts in the current cycle count towards this month.",
     acts, buildGrid(spec), "Add shift", function(){ spec.addRow(); });
 }
 
@@ -660,6 +680,18 @@ function setupPanel(){
   carry.value = state.carryOver ? "on" : "off";
   carry.addEventListener("change", function(){ state.carryOver = carry.value === "on"; commit(); renderAll(); });
 
+  function sel(opts, cur, onch){
+    const s2 = el("select",{});
+    opts.forEach(function(o){ const op = el("option",{value:String(o.v)}, o.l); if (Number(o.v)===Number(cur)) op.selected = true; s2.appendChild(op); });
+    s2.addEventListener("change", function(){ onch(parseFloat(s2.value)||0); });
+    return s2;
+  }
+  const TAX_OPTS = [ {v:0,l:"None"}, {v:20,l:"20% \u2014 basic"}, {v:40,l:"40% \u2014 higher"}, {v:45,l:"45% \u2014 additional"} ];
+  const NI_OPTS  = [ {v:0,l:"None"}, {v:8,l:"8% \u2014 main"}, {v:2,l:"2% \u2014 above upper limit"} ];
+  const PEN_OPTS = [ {v:0,l:"Not pensionable"}, {v:5.2,l:"5.2%"}, {v:6.5,l:"6.5%"}, {v:8.3,l:"8.3%"}, {v:9.8,l:"9.8%"}, {v:10.7,l:"10.7%"}, {v:12.5,l:"12.5%"} ];
+  const onOff = el("select",{}, el("option",{value:"on"},"On \u2014 deduct tax, NI, pension"), el("option",{value:"off"},"Off \u2014 use amounts as entered"));
+  onOff.value = state.deductions.on ? "on" : "off";
+  onOff.addEventListener("change", function(){ state.deductions.on = onOff.value === "on"; recalcShifts(); commit(); renderAll(); });
   const stat = function(lab, val, cls){ return el("div",{class:"sh-stat"}, el("div",{class:"sh-statlab"}, lab), el("div",{class:"sh-statval " + (cls||"")}, val)); };
   const rem = remaining();
 
@@ -679,13 +711,19 @@ function setupPanel(){
       fld("Monthly salary (take-home)", salary),
       fld("Payday", payday, "Everything resets on this day of the month."),
       fld("Currency symbol", cur),
-      fld("Carry over leftovers", carry, "Adds last cycle's remainder to this cycle's income.")
+      fld("Carry over leftovers", carry, "Adds last cycle's remainder to this cycle's income."),
+      fld("Bank shift take-home", onOff, "Turns gross shift pay into what reaches your bank."),
+      fld("Income tax on extra earnings", sel(TAX_OPTS, state.deductions.tax, function(v){ state.deductions.tax=v; recalcShifts(); commit(); renderAll(); }), "Your marginal rate."),
+      fld("National Insurance", sel(NI_OPTS, state.deductions.ni, function(v){ state.deductions.ni=v; recalcShifts(); commit(); renderAll(); })),
+      fld("NHS pension on bank pay", sel(PEN_OPTS, state.deductions.pension, function(v){ state.deductions.pension=v; recalcShifts(); commit(); renderAll(); }), "Taken before income tax.")
     ),
     el("div",{class:"sh-stats"},
       stat("Income this cycle", money2(income()), "sh-pos"),
       stat("Expenses", money2(expTotal())),
       stat("Left this cycle", money0(rem), rem>=0 ? "sh-pos" : "sh-neg"),
-      stat("Carried in", money0(carriedOver()))
+      stat("Carried in", money0(carriedOver())),
+      stat("Bank shifts (gross)", money2(grossTotal())),
+      stat("Bank shifts (take-home)", money2(bankTotal()), "sh-pos")
     )
   );
 }

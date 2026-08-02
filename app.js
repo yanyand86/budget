@@ -161,10 +161,13 @@ function makeDefaults(){
       { id: uid(), glyph: "lifebuoy", name: "Emergency fund", target: 3000, saved: 750, color: "#00C48C", targetDate: null },
       { id: uid(), glyph: "plane", name: "Holiday", target: 1500, saved: 420, color: "#6D28D9", targetDate: SEED_BY }
     ],
-    history: [], lastCycleId: null, carryOver: true, updatedAt: 0
+    history: [], lastCycleId: null, carryOver: true,
+    deductions: { on: true, tax: 20, ni: 8, pension: 0 },
+    updatedAt: 0
   };
 }
-function blank(){ return { salary:0, currency:"\u00A3", payDay:25, expenses:[], shifts:[], paid:{}, goals:[], history:[], lastCycleId:null, carryOver:true, updatedAt:0 }; }
+function blank(){ return { salary:0, currency:"\u00A3", payDay:25, expenses:[], shifts:[], paid:{}, goals:[], history:[], lastCycleId:null, carryOver:true,
+  deductions:{ on:true, tax:20, ni:8, pension:0 }, updatedAt:0 }; }
 function normalize(o){
   const s = Object.assign(blank(), o || {});
   ["expenses","shifts","goals","history"].forEach(function(k){ if (!Array.isArray(s[k])) s[k] = []; });
@@ -172,6 +175,11 @@ function normalize(o){
   if (!s.currency) s.currency = "\u00A3";
   if (!s.payDay) s.payDay = 25;
   if (typeof s.carryOver !== "boolean") s.carryOver = true;
+  const dd = s.deductions || {};
+  s.deductions = { on: typeof dd.on === "boolean" ? dd.on : true,
+    tax: dd.tax != null ? dd.tax : 20, ni: dd.ni != null ? dd.ni : 8, pension: dd.pension != null ? dd.pension : 0 };
+  /* older shifts stored only a single figure - treat it as gross */
+  s.shifts = s.shifts.map(function(x){ if (x.gross == null) x.gross = x.amount || 0; return x; });
   s.goals = s.goals.map(function(g){
     if (!g.glyph) g.glyph = (g.emoji && EMOJI_MAP[g.emoji]) ? EMOJI_MAP[g.emoji] : "target";
     if (GOAL_COLORS.indexOf(g.color) < 0) g.color = GOAL_COLORS[0];
@@ -207,6 +215,29 @@ function carriedOver(){
 function income(){ return (state.salary||0) + bankTotal() + carriedOver(); }
 /* net for this cycle alone, ignoring anything carried in */
 function ownSaved(){ return remaining() - carriedOver(); }
+const TAX_OPTS = [ {v:0,l:"None"}, {v:20,l:"20% \u2014 basic rate"}, {v:40,l:"40% \u2014 higher rate"}, {v:45,l:"45% \u2014 additional rate"} ];
+const NI_OPTS  = [ {v:0,l:"None"}, {v:8,l:"8% \u2014 main rate"}, {v:2,l:"2% \u2014 above upper limit"} ];
+const PEN_OPTS = [ {v:0,l:"Not pensionable"}, {v:5.2,l:"5.2%"}, {v:6.5,l:"6.5%"}, {v:8.3,l:"8.3%"}, {v:9.8,l:"9.8%"}, {v:10.7,l:"10.7%"}, {v:12.5,l:"12.5%"} ];
+function netFromGross(gross, d){
+  gross = Math.max(0, gross || 0);
+  d = d || { tax:0, ni:0, pension:0 };
+  const pension = round2(gross * (d.pension||0) / 100);
+  const tax = round2(Math.max(0, gross - pension) * (d.tax||0) / 100);
+  const ni = round2(gross * (d.ni||0) / 100);
+  return { gross:gross, pension:pension, tax:tax, ni:ni,
+    total: round2(pension+tax+ni), net: round2(gross - pension - tax - ni) };
+}
+function activeDed(){ const d = state.deductions || {}; return d.on ? { tax:d.tax||0, ni:d.ni||0, pension:d.pension||0 } : { tax:0, ni:0, pension:0 }; }
+/* re-derive every shift's take-home from its gross using the current settings */
+function recalcShifts(){
+  const d = activeDed();
+  state.shifts.forEach(function(s){
+    if (s.gross == null) s.gross = s.amount || 0;
+    const r = netFromGross(s.gross, d);
+    s.amount = r.net; s.ded = { tax:d.tax, ni:d.ni, pension:d.pension };
+  });
+}
+function grossTotal(){ return cycleShifts().reduce(function(a,s){ return a+(s.gross != null ? s.gross : s.amount||0); },0); }
 function monthsBetween(a, b){ const x=a.split("-").map(Number), y=b.split("-").map(Number); return (y[0]*12+(y[1]-1)) - (x[0]*12+(x[1]-1)); }
 /* endsOn = month of the FINAL payment (inclusive). Judged per-cycle so past months archive correctly. */
 function expActiveIn(e, cycleId){ return !e.endsOn || e.endsOn >= (cycleId || cyc().id); }
@@ -372,7 +403,8 @@ function renderApp(){
   }
   incomeCard.appendChild(h("div",{class:"pf-subhead"},
     h("span",{class:"pf-subtitle"}, "Bank shifts ", h("span",{class:"pf-count"}, String(shifts.length))),
-    h("span",{class:"pf-pos pf-subtot"}, "+"+money2(bankTotal()))
+    h("span",{class:"pf-pos pf-subtot"}, "+"+money2(bankTotal()),
+      (state.deductions.on && grossTotal() > bankTotal()) ? h("span",{class:"pf-grosshint"}, " net of "+money0(grossTotal())) : null)
   ));
   const shiftList = h("div",{class:"pf-list"});
   if (shifts.length){
@@ -381,7 +413,8 @@ function renderApp(){
         h("span",{class:"pf-ic pf-ic--bank"}, glyphSvg("landmark",20,"#00A578")),
         h("div",{class:"pf-expmid"},
           h("span",{class:"pf-expname"}, s.label || "Bank shift"),
-          h("span",{class:"pf-expcat"}, new Date(s.date+"T00:00:00").toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"}) + ((s.hours&&s.rate) ? " \u00B7 "+s.hours+"h \u00D7 "+CUR()+s.rate : ""))
+          h("span",{class:"pf-expcat"}, new Date(s.date+"T00:00:00").toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"}) + ((s.hours&&s.rate) ? " \u00B7 "+s.hours+"h \u00D7 "+CUR()+s.rate : ""),
+            (s.gross != null && s.gross > (s.amount||0)) ? h("span",{class:"pf-endchip"}, money0(s.gross)+" gross") : null)
         ),
         h("span",{class:"pf-expamt pf-pos"}, "+"+money2(s.amount))
       ));
@@ -646,21 +679,43 @@ function openShift(existing){
   const label = h("input",{class:"pf-input", placeholder:"e.g. Long day \u00B7 Renal", value: existing?existing.label:""});
   const hours = h("input",{class:"pf-input", inputmode:"decimal", placeholder:"0", value: (existing&&existing.hours!=null)?existing.hours:""});
   const rate = amtInput((existing&&existing.rate!=null)?existing.rate:"");
-  const amt = amtInput(existing?existing.amount:"");
-  function recalc(){ const a = (parseFloat(hours.value)||0)*(parseFloat(rate._input.value)||0); if (a) amt._input.value = String(round2(a)); }
-  hours.addEventListener("input", recalc); rate._input.addEventListener("input", recalc);
+  const amt = amtInput(existing ? (existing.gross != null ? existing.gross : existing.amount) : "");
+  const bd = h("div",{class:"pf-bd"});
+  function paintBd(){
+    const d = activeDed();
+    const r = netFromGross(parseFloat(amt._input.value)||0, d);
+    bd.innerHTML = "";
+    if (!state.deductions.on){
+      bd.appendChild(h("div",{class:"pf-bdrow pf-bdrow--tot"}, h("span",{},"Counted as take-home"), h("strong",{}, money2(r.gross))));
+      bd.appendChild(h("div",{class:"pf-bdnote"}, "Take-home estimating is off \u2014 turn it on in Settings to deduct tax and NI."));
+      return;
+    }
+    bd.appendChild(h("div",{class:"pf-bdrow"}, h("span",{},"Gross pay"), h("span",{}, money2(r.gross))));
+    if (d.pension) bd.appendChild(h("div",{class:"pf-bdrow"}, h("span",{},"NHS pension "+d.pension+"%"), h("span",{class:"pf-bdminus"}, "\u2212"+money2(r.pension))));
+    if (d.tax) bd.appendChild(h("div",{class:"pf-bdrow"}, h("span",{},"Income tax "+d.tax+"%"), h("span",{class:"pf-bdminus"}, "\u2212"+money2(r.tax))));
+    if (d.ni) bd.appendChild(h("div",{class:"pf-bdrow"}, h("span",{},"National Insurance "+d.ni+"%"), h("span",{class:"pf-bdminus"}, "\u2212"+money2(r.ni))));
+    bd.appendChild(h("div",{class:"pf-bdrow pf-bdrow--tot"}, h("span",{},"Take-home"), h("strong",{class:"pf-pos"}, money2(r.net))));
+    bd.appendChild(h("div",{class:"pf-bdnote"}, "This take-home figure is what counts towards your budget."));
+  }
+  function recalc(){ const a = (parseFloat(hours.value)||0)*(parseFloat(rate._input.value)||0); if (a) amt._input.value = String(round2(a)); paintBd(); }
+  amt._input.addEventListener("input", paintBd);
+  hours.addEventListener("input", recalc); rate._input.addEventListener("input", recalc); paintBd();
   const act = h("div",{class:"pf-actions"});
   if (existing) act.appendChild(dangerBtn(function(){ delShift(existing.id); closeSheet(); }));
   act.appendChild(primaryBtn("Save", function(){
-    const a = round2(parseFloat(amt._input.value)||0); if (!(a>0)) return;
-    upsertShift({ id: existing?existing.id:uid(), date:date.value, label:label.value.trim(), hours:parseFloat(hours.value)||null, rate:parseFloat(rate._input.value)||null, amount:a }); closeSheet();
+    const g = round2(parseFloat(amt._input.value)||0); if (!(g>0)) return;
+    const d = activeDed(); const r = netFromGross(g, d);
+    upsertShift({ id: existing?existing.id:uid(), date:date.value, label:label.value.trim(),
+      hours:parseFloat(hours.value)||null, rate:parseFloat(rate._input.value)||null,
+      gross:g, amount:r.net, ded:{ tax:d.tax, ni:d.ni, pension:d.pension } }); closeSheet();
   }));
   openSheet(existing?"Edit bank shift":"Add bank shift", h("div",{},
     h("p",{class:"pf-help"},"Log extra shifts you pick up through the bank. They count towards this pay cycle only."),
     field("Date worked", date),
     field("Label (optional)", label),
     h("div",{class:"pf-grid2"}, field("Hours", hours), field("Rate / hr", rate)),
-    field("Pay for this shift", amt, "Fills in from hours \u00D7 rate \u2014 or type a flat amount."),
+    field("Gross pay for this shift", amt, "Fills in from hours \u00D7 rate \u2014 or type a flat amount. Enter it before deductions."),
+    bd,
     act
   ));
 }
@@ -774,6 +829,52 @@ function openSettings(){
   const saveBtn = primaryBtn("Save", function(){ state.payDay = clamp(parseInt(payday.value,10)||25,1,28); state.currency = (curIn.value.trim()||"\u00A3"); commit(); closeSheet(); });
   const toggle = h("button",{class:"pf-toggle"+(state.carryOver?" pf-toggle--on":""), role:"switch", "aria-checked":state.carryOver?"true":"false"}, h("span",{class:"pf-knob"}));
   toggle.addEventListener("click", function(){ state.carryOver = !state.carryOver; toggle.className = "pf-toggle"+(state.carryOver?" pf-toggle--on":""); toggle.setAttribute("aria-checked", state.carryOver?"true":"false"); commit(); });
+  /* bank shift take-home */
+  function mkSel(opts, cur){
+    const s = h("select",{class:"pf-input"});
+    opts.forEach(function(o){ const op = h("option",{value:String(o.v)}, o.l); if (Number(o.v) === Number(cur)) op.selected = true; s.appendChild(op); });
+    return s;
+  }
+  const taxSel = mkSel(TAX_OPTS, state.deductions.tax);
+  const niSel  = mkSel(NI_OPTS,  state.deductions.ni);
+  const penSel = mkSel(PEN_OPTS, state.deductions.pension);
+  const dedToggle = h("button",{class:"pf-toggle"+(state.deductions.on?" pf-toggle--on":""), role:"switch", "aria-checked":state.deductions.on?"true":"false"}, h("span",{class:"pf-knob"}));
+  const dedFields = h("div",{});
+  function applyDed(){
+    state.deductions.on = !!state.deductions.on;
+    state.deductions.tax = parseFloat(taxSel.value)||0;
+    state.deductions.ni = parseFloat(niSel.value)||0;
+    state.deductions.pension = parseFloat(penSel.value)||0;
+    recalcShifts(); commit();
+    paintDed();
+  }
+  function paintDed(){
+    dedFields.innerHTML = "";
+    if (!state.deductions.on){
+      dedFields.appendChild(h("p",{class:"pf-mini"},"Bank shift amounts are counted exactly as you enter them."));
+      return;
+    }
+    dedFields.appendChild(field("Income tax on extra earnings", taxSel, "Your marginal rate \u2014 the band your bank pay falls into on top of your salary."));
+    dedFields.appendChild(field("National Insurance", niSel, "8% is the main rate; 2% applies if you're already above the upper earnings limit."));
+    dedFields.appendChild(field("NHS pension on bank pay", penSel, "Only if your bank shifts are pensionable. Taken before income tax."));
+    const d = activeDed(); const ex = netFromGross(100, d);
+    dedFields.appendChild(h("div",{class:"pf-newtotal"}, "For every "+CUR()+"100 gross you keep about ", h("strong",{}, money2(ex.net))));
+  }
+  dedToggle.addEventListener("click", function(){
+    state.deductions.on = !state.deductions.on;
+    dedToggle.className = "pf-toggle"+(state.deductions.on?" pf-toggle--on":"");
+    dedToggle.setAttribute("aria-checked", state.deductions.on?"true":"false");
+    applyDed();
+  });
+  [taxSel, niSel, penSel].forEach(function(s){ s.addEventListener("change", applyDed); });
+  paintDed();
+  const dedBox = h("div",{},
+    h("div",{class:"pf-divlabel"},"Bank shift take-home"),
+    h("div",{class:"pf-toggrow"},
+      h("div",{}, h("span",{class:"pf-toglab"},"Estimate take-home"), h("span",{class:"pf-hint"},"Turn gross shift pay into what actually reaches your bank.")),
+      dedToggle),
+    dedFields);
+
   const carryRow = h("div",{class:"pf-toggrow"},
     h("div",{}, h("span",{class:"pf-toglab"},"Carry over what's left"), h("span",{class:"pf-hint"},"Adds last cycle's leftover to this cycle's income.")),
     toggle);
@@ -851,6 +952,7 @@ function openSettings(){
     field("Currency symbol", curIn),
     carryRow,
     actions(saveBtn),
+    dedBox,
     h("div",{class:"pf-divlabel"},"Spreadsheet"),
     sheetLink,
     h("p",{class:"pf-mini"},"A wide, spreadsheet-style screen for editing lots of rows at once \u2014 same data, same sync."),
