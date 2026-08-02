@@ -207,7 +207,15 @@ function carriedOver(){
 function income(){ return (state.salary||0) + bankTotal() + carriedOver(); }
 /* net for this cycle alone, ignoring anything carried in */
 function ownSaved(){ return remaining() - carriedOver(); }
-function expTotal(){ return state.expenses.reduce(function(a,e){ return a+(e.amount||0); }, 0); }
+function monthsBetween(a, b){ const x=a.split("-").map(Number), y=b.split("-").map(Number); return (y[0]*12+(y[1]-1)) - (x[0]*12+(x[1]-1)); }
+/* endsOn = month of the FINAL payment (inclusive). Judged per-cycle so past months archive correctly. */
+function expActiveIn(e, cycleId){ return !e.endsOn || e.endsOn >= (cycleId || cyc().id); }
+function activeExpenses(cycleId){ return state.expenses.filter(function(e){ return expActiveIn(e, cycleId); }); }
+function finishedExpenses(){ return state.expenses.filter(function(e){ return !expActiveIn(e, cyc().id); }); }
+/* payments still to come, including this cycle */
+function paymentsLeft(e){ if (!e.endsOn) return null; return Math.max(0, monthsBetween(cyc().id, e.endsOn) + 1); }
+function remainingCost(e){ const n = paymentsLeft(e); return n == null ? null : n * (e.amount||0); }
+function expTotal(){ return activeExpenses().reduce(function(a,e){ return a+(e.amount||0); }, 0); }
 function remaining(){ return income() - expTotal(); }
 function pctRemain(){ const i = income(); return i > 0 ? remaining()/i : 0; }
 function ringColor(){ const r = remaining(), i = income(); return r < 0 ? "#FF6B8A" : (i > 0 && r/i < 0.15) ? "#FFC53D" : "#2DE1A8"; }
@@ -236,7 +244,7 @@ function archiveCycle(id){
     const t = new Date(s.date + "T00:00:00").getTime();
     return (t >= start.getTime() && t < end.getTime()) ? a + (s.amount || 0) : a;
   }, 0);
-  const expenses = state.expenses.reduce(function(a, e){ return a + (e.amount || 0); }, 0);
+  const expenses = activeExpenses(id).reduce(function(a, e){ return a + (e.amount || 0); }, 0);
   const prev = histFor(shiftCycleId(id, -1));
   const carriedIn = (state.carryOver && prev) ? (prev.saved || 0) : 0;
   const inc = (state.salary || 0) + shiftsTotal + carriedIn;
@@ -428,34 +436,65 @@ function renderApp(){
   const expCard = h("section",{class:"pf-card"});
   expCard.appendChild(cardHead("Monthly expenses", money2(expTotal())));
   const byCat = {};
-  state.expenses.forEach(function(e){ byCat[e.category] = (byCat[e.category]||0) + (e.amount||0); });
+  const liveExp = activeExpenses();
+  liveExp.forEach(function(e){ byCat[e.category] = (byCat[e.category]||0) + (e.amount||0); });
   const total = expTotal();
   const comp = h("div",{class:"pf-compbar"});
   if (total>0){
     CAT_ORDER.forEach(function(k){ if (byCat[k]){ const seg = h("div",{class:"pf-seg", style:{background:catOf(k).color}}); growW(seg, byCat[k]/total); comp.appendChild(seg); } });
   } else comp.appendChild(h("div",{class:"pf-seg pf-seg--empty", style:{width:"100%"}}));
   expCard.appendChild(comp);
-  const paidTotal = state.expenses.reduce(function(a,e){ return a + (state.paid[pk(e.id)] ? (e.amount||0) : 0); }, 0);
-  const paidCount = state.expenses.filter(function(e){ return state.paid[pk(e.id)]; }).length;
+  const paidTotal = liveExp.reduce(function(a,e){ return a + (state.paid[pk(e.id)] ? (e.amount||0) : 0); }, 0);
+  const paidCount = liveExp.filter(function(e){ return state.paid[pk(e.id)]; }).length;
   expCard.appendChild(h("div",{class:"pf-expmeta"},
     h("span",{}, "Still to pay ", h("strong",{}, money2(Math.max(0,total-paidTotal)))),
-    h("span",{}, paidCount + "/" + state.expenses.length + " paid")
+    h("span",{}, paidCount + "/" + liveExp.length + " paid")
   ));
   const expList = h("div",{class:"pf-list"});
-  if (state.expenses.length){
-    state.expenses.slice().sort(function(a,b){ return (b.amount||0)-(a.amount||0); }).forEach(function(e){
+  if (liveExp.length){
+    liveExp.slice().sort(function(a,b){ return (b.amount||0)-(a.amount||0); }).forEach(function(e){
       const c = catOf(e.category); const isPaid = !!state.paid[pk(e.id)];
       const chk = h("button",{class:"pf-check"+(isPaid?" pf-check--on":""), "aria-label":isPaid?"Mark as not paid":"Mark as paid", onClick:function(ev){ ev.stopPropagation(); togglePaid(e.id); }});
       if (isPaid) chk.appendChild(icon("check",14));
       expList.appendChild(h("div",{class:"pf-exp"+(isPaid?" pf-exp--paid":""), role:"button", tabindex:"0", onClick:function(){ openExpense(e); }, onKeydown:onKey(function(){ openExpense(e); })},
         h("span",{class:"pf-ic", style:{background:tint(c.color,0.15)}}, glyphSvg(c.glyph,21,c.color)),
-        h("div",{class:"pf-expmid"}, h("span",{class:"pf-expname"}, e.name), h("span",{class:"pf-expcat"}, c.label)),
+        h("div",{class:"pf-expmid"},
+          h("span",{class:"pf-expname"}, e.name),
+          h("span",{class:"pf-expcat"}, c.label, (function(){
+            const n = paymentsLeft(e);
+            if (n == null) return null;
+            const endLbl = (function(){ const p=e.endsOn.split("-").map(Number); return new Date(p[0],p[1]-1,1).toLocaleDateString("en-GB",{month:"short",year:"numeric"}); })();
+            return h("span",{class:"pf-endchip"+(n<=1?" pf-endchip--last":"")},
+              n<=1 ? "last payment" : n+" left \u00B7 "+money0(remainingCost(e))+" to go",
+              h("span",{class:"pf-endwhen"}, " \u00B7 ends "+endLbl));
+          })())),
         h("span",{class:"pf-expamt"}, money2(e.amount)),
         chk
       ));
     });
   } else expList.appendChild(emptyNode("No expenses yet. Add your monthly bills to get started."));
   expCard.appendChild(expList);
+  const fin = finishedExpenses();
+  if (fin.length){
+    expCard.appendChild(h("div",{class:"pf-subhead"},
+      h("span",{class:"pf-subtitle"}, "Finished ", h("span",{class:"pf-count"}, String(fin.length))),
+      h("span",{class:"pf-subtot pf-muted2"}, "not counted")
+    ));
+    const finList = h("div",{class:"pf-list"});
+    fin.forEach(function(e){
+      const c = catOf(e.category);
+      const p = e.endsOn.split("-").map(Number);
+      const endLbl = new Date(p[0],p[1]-1,1).toLocaleDateString("en-GB",{month:"short",year:"numeric"});
+      finList.appendChild(h("div",{class:"pf-exp pf-exp--fin"},
+        h("span",{class:"pf-ic", style:{background:"#F1ECFB"}}, glyphSvg(c.glyph,21,"#A49DBA")),
+        h("div",{class:"pf-expmid", role:"button", tabindex:"0", onClick:function(){ openExpense(e); }, onKeydown:onKey(function(){ openExpense(e); })},
+          h("span",{class:"pf-expname"}, e.name),
+          h("span",{class:"pf-expcat"}, "Paid off \u00B7 last payment "+endLbl)),
+        h("button",{class:"pf-removebtn", onClick:function(ev){ ev.stopPropagation(); delExpense(e.id); toast(e.name+" removed"); }}, "Remove")
+      ));
+    });
+    expCard.appendChild(finList);
+  }
   expCard.appendChild(addBtn("Add expense", function(){ openExpense(); }));
   app.appendChild(expCard);
 
@@ -567,6 +606,16 @@ function openExpense(existing){
   let cat = existing ? existing.category : "other";
   const name = h("input",{class:"pf-input", placeholder:"e.g. Rent", value: existing?existing.name:""});
   const amt = amtInput(existing?existing.amount:"");
+  const ends = h("input",{class:"pf-input", type:"month", value:(existing&&existing.endsOn)?existing.endsOn:""});
+  const endsInfo = h("span",{class:"pf-hint"});
+  function updEnds(){
+    if (!ends.value){ endsInfo.textContent = "Leave blank for ongoing bills like rent. Set it for loans, credit cards or anything that ends."; return; }
+    const n = Math.max(0, monthsBetween(cyc().id, ends.value) + 1);
+    const a = parseFloat(amt._input.value)||0;
+    endsInfo.textContent = n===0 ? "Already finished \u2014 it won't be counted, and you can remove it."
+      : n+" payment"+(n===1?"":"s")+" left"+(a?" \u00B7 "+money0(n*a)+" still to pay":"")+". It stops counting after that.";
+  }
+  ends.addEventListener("change", updEnds); amt._input.addEventListener("input", updEnds); updEnds();
   const grid = h("div",{class:"pf-catgrid"});
   function paint(){
     grid.innerHTML = "";
@@ -585,9 +634,10 @@ function openExpense(existing){
   act.appendChild(primaryBtn("Save", function(){
     const nm = name.value.trim(); const a = parseFloat(amt._input.value);
     if (!nm || isNaN(a)) return;
-    upsertExpense({ id: existing?existing.id:uid(), name:nm, category:cat, amount:Math.max(0,a||0) }); closeSheet();
+    upsertExpense({ id: existing?existing.id:uid(), name:nm, category:cat, amount:Math.max(0,a||0), endsOn: ends.value || null }); closeSheet();
   }));
-  openSheet(existing?"Edit expense":"Add expense", h("div",{}, field("Name", name), field("Amount per month", amt), field("Category", grid), act));
+  const fEnds = h("div",{class:"pf-field"}, h("label",{class:"pf-lab"},"Final payment month (optional)"), ends, endsInfo);
+  openSheet(existing?"Edit expense":"Add expense", h("div",{}, field("Name", name), field("Amount per month", amt), fEnds, field("Category", grid), act));
 }
 
 function openShift(existing){
@@ -795,11 +845,15 @@ function openSettings(){
   }
   paintReset();
 
+  const sheetLink = h("a",{class:"pf-btn pf-btn--ghost", href:"sheet.html", style:{textDecoration:"none"}}, "Open sheet view \u2192");
   openSheet("Settings", h("div",{},
     field("Payday \u2014 the day everything resets", payday, "Your cycle runs from this day to the day before it, next month."),
     field("Currency symbol", curIn),
     carryRow,
     actions(saveBtn),
+    h("div",{class:"pf-divlabel"},"Spreadsheet"),
+    sheetLink,
+    h("p",{class:"pf-mini"},"A wide, spreadsheet-style screen for editing lots of rows at once \u2014 same data, same sync."),
     h("div",{style:{height:"6px"}}),
     syncBox,
     backupBox,

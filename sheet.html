@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Budget — Sheet</title>
+<meta name="theme-color" content="#6D28D9">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: radial-gradient(120% 55% at 50% -10%, #EDE0FF 0%, rgba(237,224,255,0) 60%), #F6F3FC;
+  color: #241B3D; min-height: 100vh; -webkit-font-smoothing: antialiased;
+}
+.sh-wrap { max-width: 1180px; margin: 0 auto; padding: 18px 16px 60px; }
+
+/* header */
+.sh-top { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+.sh-brand { display: flex; align-items: center; gap: 11px; }
+.sh-logo { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(150deg,#5B21B6,#7C3AED 46%,#A21CAF);
+  display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 19px; box-shadow: 0 8px 18px -8px rgba(109,40,217,.7); }
+.sh-h1 { margin: 0; font-size: 19px; font-weight: 800; letter-spacing: -.015em; color: #2A1055; }
+.sh-sub { font-size: 12px; color: #7A7295; font-weight: 600; }
+.sh-topright { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+.sh-btn { padding: 9px 14px; border-radius: 11px; border: 1px solid #E2D8F7; background: #fff; color: #4B4166;
+  font-size: 13px; font-weight: 680; cursor: pointer; font-family: inherit; display: inline-flex; align-items: center; gap: 6px;
+  transition: transform .12s ease, border-color .15s ease, background .15s ease; white-space: nowrap; }
+.sh-btn:hover { border-color: #C4A6FA; background: #FBF8FF; }
+.sh-btn:active { transform: scale(.97); }
+.sh-btn--primary { background: linear-gradient(135deg,#6D28D9,#A21CAF); color: #fff; border: none; box-shadow: 0 8px 18px -8px rgba(109,40,217,.7); }
+.sh-btn--mint { background: #DFFBF1; color: #00966C; border-color: #B7F0DD; }
+.sh-btn--danger { background: #FFE9EE; color: #E5395F; border-color: #FBD3DC; }
+.sh-btn:disabled { opacity: .45; cursor: not-allowed; }
+
+/* sync bar */
+.sh-sync { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: #fff; border: 1px solid #EBE3FA;
+  border-radius: 14px; padding: 10px 13px; margin-bottom: 14px; box-shadow: 0 1px 2px rgba(63,30,120,.04); }
+.sh-led { width: 9px; height: 9px; border-radius: 50%; background: #C9C1DC; flex: 0 0 auto; }
+.sh-led--ok { background: #00C48C; }
+.sh-led--warn { background: #F59E0B; }
+.sh-led--busy { background: #7C3AED; animation: sh-pulse 1s ease-in-out infinite; }
+@keyframes sh-pulse { 50% { opacity: .3; } }
+.sh-syncmsg { font-size: 13px; font-weight: 650; color: #4B4166; flex: 1; min-width: 160px; }
+.sh-syncmsg span { color: #8C86A0; font-weight: 600; }
+.sh-cid { flex: 1; min-width: 220px; padding: 8px 11px; border: 1px solid #E2D8F7; border-radius: 10px; font-size: 12.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: #FAF8FE; color: #4B4166; }
+.sh-cid:focus { outline: none; border-color: #7C3AED; background: #fff; }
+
+/* tabs */
+.sh-tabs { display: flex; gap: 6px; margin-bottom: 12px; overflow-x: auto; padding-bottom: 2px; }
+.sh-tab { padding: 9px 15px; border-radius: 11px; border: 1px solid transparent; background: transparent; color: #6B6289;
+  font-size: 13.5px; font-weight: 700; cursor: pointer; font-family: inherit; white-space: nowrap; transition: background .15s, color .15s; }
+.sh-tab:hover { background: #F1EAFE; }
+.sh-tab--on { background: #fff; color: #6D28D9; border-color: #E2D8F7; box-shadow: 0 2px 8px -4px rgba(63,30,120,.3); }
+.sh-tabcount { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; margin-left: 6px;
+  border-radius: 9px; background: #EDE6FB; color: #7C6BA8; font-size: 11px; font-weight: 750; }
+.sh-tab--on .sh-tabcount { background: #EDE0FF; color: #6D28D9; }
+
+/* card + grid */
+.sh-card { background: #fff; border: 1px solid #EBE3FA; border-radius: 16px; overflow: hidden;
+  box-shadow: 0 1px 2px rgba(63,30,120,.05), 0 16px 34px -20px rgba(63,30,120,.25); }
+.sh-cardbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  padding: 12px 14px; border-bottom: 1px solid #F1ECFB; }
+.sh-cardtitle { margin: 0; font-size: 14.5px; font-weight: 780; color: #2A1055; }
+.sh-cardhint { font-size: 12px; color: #8C86A0; font-weight: 600; }
+.sh-cardacts { display: flex; gap: 7px; flex-wrap: wrap; }
+
+.sh-scroll { overflow-x: auto; }
+table.sh-grid { width: 100%; border-collapse: separate; border-spacing: 0; min-width: 620px; }
+.sh-grid th { position: sticky; top: 0; z-index: 2; background: #FBF9FE; text-align: left; padding: 10px 12px;
+  font-size: 11px; font-weight: 750; letter-spacing: .05em; text-transform: uppercase; color: #7A7295;
+  border-bottom: 1px solid #EDE6FB; white-space: nowrap; }
+.sh-grid th.sh-r, .sh-grid td.sh-r { text-align: right; }
+.sh-grid td { padding: 0; border-bottom: 1px solid #F5F1FC; vertical-align: middle; }
+.sh-grid tbody tr:nth-child(even) td { background: #FDFCFF; }
+.sh-grid tbody tr:hover td { background: #FAF6FF; }
+.sh-grid tbody tr.sh-row--done td { color: #A49DBA; }
+.sh-num { width: 44px; text-align: center; color: #B0A9C4; font-size: 11.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.sh-in { width: 100%; border: 1.5px solid transparent; background: transparent; padding: 11px 12px; font-size: 14px;
+  font-family: inherit; color: #241B3D; border-radius: 8px; }
+.sh-in:hover { border-color: #EDE6FB; }
+.sh-in:focus { outline: none; border-color: #7C3AED; background: #fff; box-shadow: 0 0 0 3px rgba(124,58,237,.12); }
+.sh-in--num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 650; }
+.sh-in--date { font-variant-numeric: tabular-nums; }
+select.sh-in { cursor: pointer; -webkit-appearance: none; appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237A7295' stroke-width='3' stroke-linecap='round'><path d='M5 9l7 7 7-7'/></svg>");
+  background-repeat: no-repeat; background-position: right 10px center; padding-right: 26px; }
+.sh-swatch { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 7px; vertical-align: middle; flex: 0 0 auto; }
+.sh-catcell { display: flex; align-items: center; padding-left: 12px; }
+.sh-catcell select { padding-left: 2px; }
+
+.sh-chk { width: 20px; height: 20px; accent-color: #00C48C; cursor: pointer; }
+.sh-chkcell { text-align: center; }
+.sh-del { width: 30px; height: 30px; border-radius: 8px; border: none; background: transparent; color: #C6BEDA;
+  cursor: pointer; display: grid; place-items: center; transition: background .15s, color .15s; }
+.sh-del:hover { background: #FFE9EE; color: #E5395F; }
+.sh-delcell { width: 46px; text-align: center; }
+
+.sh-grid tfoot td { padding: 12px; background: #FBF9FE; border-top: 1px solid #EDE6FB; font-weight: 780;
+  font-variant-numeric: tabular-nums; color: #2A1055; font-size: 14px; }
+.sh-foothint { font-size: 11.5px; font-weight: 650; color: #8C86A0; text-transform: uppercase; letter-spacing: .05em; }
+.sh-pos { color: #00A578; }
+.sh-neg { color: #E5395F; }
+.sh-pill { display: inline-block; padding: 3px 8px; border-radius: 999px; font-size: 11px; font-weight: 750; }
+.sh-pill--auto { background: #EDE0FF; color: #6D28D9; }
+.sh-pill--manual { background: #F1ECFB; color: #7A7295; }
+.sh-pill--now { background: #D6F9EC; color: #00966C; }
+
+.sh-addbar { padding: 11px 14px; border-top: 1px solid #F1ECFB; }
+.sh-add { width: 100%; padding: 11px; border: 1.5px dashed #D5C6FB; border-radius: 12px; background: transparent;
+  color: #7C3AED; font-size: 13.5px; font-weight: 700; cursor: pointer; font-family: inherit;
+  transition: background .15s, border-color .15s; }
+.sh-add:hover { background: #F6F1FF; border-color: #A78BFA; }
+
+.sh-empty { padding: 34px 16px; text-align: center; color: #9A93AE; font-size: 13.5px; }
+
+/* setup tab */
+.sh-form { padding: 16px; display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; }
+.sh-field label { display: block; font-size: 12px; font-weight: 700; color: #5A5470; margin-bottom: 6px; }
+.sh-field input, .sh-field select { width: 100%; padding: 11px 12px; border: 1.5px solid #E2D8F7; border-radius: 11px;
+  font-size: 14.5px; font-family: inherit; background: #FAF8FE; color: #241B3D; }
+.sh-field input:focus, .sh-field select:focus { outline: none; border-color: #7C3AED; background: #fff; }
+.sh-fhint { font-size: 11.5px; color: #9A93AE; margin-top: 5px; line-height: 1.45; }
+.sh-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; padding: 0 16px 16px; }
+.sh-stat { background: linear-gradient(135deg,#F7F3FF,#EFFBF6); border: 1px solid #E8DEFB; border-radius: 14px; padding: 14px; }
+.sh-statlab { font-size: 11px; font-weight: 700; color: #7A7295; letter-spacing: .04em; text-transform: uppercase; }
+.sh-statval { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -.02em; margin-top: 4px; }
+
+.sh-note { font-size: 12.5px; color: #7A7295; line-height: 1.6; margin: 14px 2px 0; }
+.sh-note code { background: #F1ECFB; padding: 1px 6px; border-radius: 5px; font-size: 12px; }
+
+.sh-toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(18px);
+  background: #2A1055; color: #fff; font-size: 13.5px; font-weight: 650; padding: 12px 20px; border-radius: 13px;
+  box-shadow: 0 12px 30px rgba(42,16,85,.35); opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s; z-index: 100; }
+.sh-toast--on { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid #7C3AED; outline-offset: 2px; }
+
+@media (max-width: 640px) {
+  .sh-wrap { padding: 14px 10px 50px; }
+  .sh-h1 { font-size: 17px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<div class="sh-wrap">
+  <div class="sh-top">
+    <div class="sh-brand">
+      <div class="sh-logo">£</div>
+      <div>
+        <h1 class="sh-h1">Budget — Sheet view</h1>
+        <div class="sh-sub" id="sh-cyclelabel">&nbsp;</div>
+      </div>
+    </div>
+    <div class="sh-topright">
+      <button class="sh-btn" id="sh-reload">↻ Reload from Drive</button>
+      <a class="sh-btn sh-btn--primary" href="./" style="text-decoration:none">Open app view →</a>
+    </div>
+  </div>
+
+  <div class="sh-sync" id="sh-syncbar"></div>
+  <div class="sh-tabs" id="sh-tabs"></div>
+  <div id="sh-panel"></div>
+
+  <p class="sh-note">
+    Edits save as you type and sync to the same Google Drive file your phone app uses — so changes here appear on your iPhone and iPad, and vice versa.
+    You can paste a block of cells straight from Excel into any grid, and export any tab as CSV.
+  </p>
+</div>
+<div class="sh-toast" id="sh-toast"></div>
+<script src="sheet.js"></script>
+</body>
+</html>

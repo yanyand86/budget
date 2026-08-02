@@ -1,9 +1,11 @@
 /* Offline app-shell cache. Google API + auth calls always go to the network. */
-const CACHE = "budget-shell-v2";
+const CACHE = "budget-shell-v4";
 const ASSETS = [
   "./",
   "./index.html",
   "./app.js",
+  "./sheet.html",
+  "./sheet.js",
   "./manifest.webmanifest",
   "./icon-180.png",
   "./icon-192.png",
