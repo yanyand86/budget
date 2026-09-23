@@ -9,6 +9,16 @@ const LS_CLIENT = "nhs-budget:gclient";
 const LS_DRIVE_ON = "nhs-budget:driveon";
 const DRIVE_FILE = "budget.json";
 const SCOPE = "https://www.googleapis.com/auth/drive.appdata";
+/* the theme is saved per device, so switching it never touches your synced budget */
+const LS_THEME = "nhs-budget:theme";
+const THEMES = [
+  { id:"violet", name:"Violet", meta:"#5B21B6" },
+  { id:"sunset", name:"Sunset", meta:"#B0124A" },
+  { id:"lagoon", name:"Lagoon", meta:"#13307A" },
+  { id:"emerald", name:"Emerald", meta:"#053D2F" },
+  { id:"berry", name:"Berry", meta:"#5B0F55" },
+  { id:"night", name:"Night shift", meta:"#0D0B1E" }
+];
 
 const CAT = {
   rent:      { label: "Rent / Mortgage", glyph: "home",     color: "#7C3AED" },
@@ -37,43 +47,78 @@ const GOAL_GLYPHS = ["lifebuoy","plane","home","car","gift","diamond","cap","lap
 const GOAL_COLORS = ["#00C48C","#6D28D9","#F59E0B","#EF4444","#0EA5E9","#EC4899","#14B8A6","#F97316"];
 const EMOJI_MAP = { "\uD83D\uDEDF":"lifebuoy", "\u2708\uFE0F":"plane", "\uD83C\uDFE0":"home", "\uD83D\uDE97":"car", "\uD83C\uDF81":"gift", "\uD83D\uDC8D":"diamond", "\uD83C\uDF93":"cap", "\uD83D\uDCBB":"laptop", "\u2764\uFE0F":"heart", "\uD83D\uDC37":"coins", "\uD83D\uDCF1":"phone", "\uD83D\uDECB\uFE0F":"sofa" };
 
-/* hand-drawn icon set (24x24 stroke glyphs) */
+/* hand-drawn two-tone icon set: s = the 24x24 strokes, f = the soft filled body behind them */
 const GLYPH = {
-  home:'<path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/><path d="M9.5 20v-6h5v6"/>',
-  landmark:'<path d="M3 9.5 12 4l9 5.5"/><path d="M5.5 10.5v7.5M9.8 10.5v7.5M14.2 10.5v7.5M18.5 10.5v7.5"/><path d="M3.5 20.5h17"/>',
-  zap:'<path d="M13.2 2.5 4.8 13.6h6.1l-.9 7.9 8.3-11.2h-6.2z"/>',
-  flame:'<path d="M12 21.5c3.6 0 6.2-2.4 6.2-5.7 0-4.3-4.3-6.3-4.3-9.6 0 0-1.9 1.4-1.9 3.8 0 1.4-1 1.9-1.5 1.1-.4-.6-.8-1.5-.8-2.4-1.9 1.7-3.9 3.8-3.9 7.6 0 3.3 2.6 5.2 6.2 5.2Z"/>',
-  droplet:'<path d="M12 3s5.8 6 5.8 10.2A5.8 5.8 0 0 1 6.2 13.2C6.2 9 12 3 12 3Z"/>',
-  wifi:'<path d="M2.8 9.2a14.5 14.5 0 0 1 18.4 0"/><path d="M6 12.6a9.6 9.6 0 0 1 12 0"/><path d="M9.2 16a5 5 0 0 1 5.6 0"/><circle cx="12" cy="19.4" r="1.15" fill="currentColor" stroke="none"/>',
-  phone:'<rect x="6.5" y="2.5" width="11" height="19" rx="2.6"/><path d="M10.4 18.6h3.2"/>',
-  cart:'<path d="M2.6 3.6h2.2l2.3 11.1a2 2 0 0 0 2 1.6h7.5a2 2 0 0 0 2-1.55l1.35-6.1H6"/><circle cx="9.6" cy="19.9" r="1.45"/><circle cx="17" cy="19.9" r="1.45"/>',
-  bus:'<rect x="3.6" y="3.5" width="16.8" height="13" rx="2.6"/><path d="M3.6 10.4h16.8"/><path d="M6.8 16.5v2.6M17.2 16.5v2.6"/><circle cx="8.1" cy="13.5" r=".95" fill="currentColor" stroke="none"/><circle cx="15.9" cy="13.5" r=".95" fill="currentColor" stroke="none"/>',
-  fuel:'<path d="M4.5 20.8V5.2a2 2 0 0 1 2-2h4.6a2 2 0 0 1 2 2v15.6"/><path d="M3.2 20.8h11.2"/><path d="M6.9 8.4h3.8"/><path d="M13.1 9.2h3.2a1.5 1.5 0 0 1 1.5 1.5v5.9a1.6 1.6 0 0 0 3.2 0v-5.4l-2.4-2.9"/>',
-  tv:'<rect x="2.6" y="6.6" width="18.8" height="12" rx="2.6"/><path d="M8.2 3.4 12 6.4l3.8-3"/><path d="M10.6 10.5 14.8 12.6l-4.2 2.1z" fill="currentColor" stroke="none"/>',
-  shield:'<path d="M12 2.6 4.8 5.4v5.9c0 4.5 3 8.2 7.2 9.8 4.2-1.6 7.2-5.3 7.2-9.8V5.4z"/><path d="M9.2 11.9l2.1 2.1 3.9-4"/>',
-  dumbbell:'<path d="M3 9.2v5.6M6.2 6.8v10.4M17.8 6.8v10.4M21 9.2v5.6M6.2 12h11.6"/>',
-  utensils:'<path d="M5.4 2.6v6.6a2.4 2.4 0 0 0 4.8 0V2.6"/><path d="M7.8 9.4V21.4"/><path d="M18.2 2.6c-1.9 1.5-2.9 3.4-2.9 5.8s.9 3.4 2.9 3.9v9.1"/>',
-  stroller:'<path d="M3.6 12.4h13V9.1A6.5 6.5 0 0 0 10.1 2.6"/><path d="M3.6 12.4a6.5 6.5 0 0 0 13 0"/><path d="M6.8 17.2 8.1 14M13.9 17.2 12.6 14"/><circle cx="6.2" cy="19.1" r="1.6"/><circle cx="14.4" cy="19.1" r="1.6"/>',
-  coins:'<ellipse cx="12" cy="6.4" rx="6.8" ry="2.9"/><path d="M5.2 6.4v5c0 1.6 3 2.9 6.8 2.9s6.8-1.3 6.8-2.9v-5"/><path d="M5.2 11.4v5c0 1.6 3 2.9 6.8 2.9s6.8-1.3 6.8-2.9v-5"/>',
-  card:'<rect x="2.6" y="5.2" width="18.8" height="13.6" rx="2.6"/><path d="M2.6 10.1h18.8"/><path d="M6.2 14.8h4.2"/>',
-  receipt:'<path d="M5.6 2.6h12.8v18.8l-2.15-1.45-2.15 1.45-2.1-1.45-2.15 1.45-2.1-1.45L5.6 21.4z"/><path d="M9 8.2h6M9 12.1h6"/>',
-  lifebuoy:'<circle cx="12" cy="12" r="8.6"/><circle cx="12" cy="12" r="3.5"/><path d="M6 6l3.5 3.5M18 6l-3.5 3.5M6 18l3.5-3.5M18 18l-3.5-3.5"/>',
-  plane:'<path d="M21 15.4 13.4 11.9V5.1a1.45 1.45 0 0 0-2.9 0v6.8L3 15.4v2.1l7.5-2.2v3.4L8 20.5v1.5l4-1.15 4 1.15v-1.5l-2.5-1.75v-3.4L21 17.5z"/>',
-  car:'<path d="M4.2 15.4l1.7-5.8a2 2 0 0 1 1.95-1.5h8.3a2 2 0 0 1 1.95 1.5l1.7 5.8"/><path d="M3.8 15.4h16.4"/><path d="M5.8 15.4v3.3h3v-3.3M15.2 15.4v3.3h3v-3.3"/><circle cx="7.6" cy="12.7" r=".95" fill="currentColor" stroke="none"/><circle cx="16.4" cy="12.7" r=".95" fill="currentColor" stroke="none"/>',
-  gift:'<rect x="3.2" y="8.4" width="17.6" height="4.1" rx="1.2"/><path d="M4.9 12.5v8.9h14.2v-8.9"/><path d="M12 8.4v13"/><path d="M12 8.4S9.6 8.5 8.4 7.3a2.25 2.25 0 0 1 3.15-3.15C12.7 5.3 12 8.4 12 8.4Z"/><path d="M12 8.4s2.4.1 3.6-1.1a2.25 2.25 0 0 0-3.15-3.15C11.3 5.3 12 8.4 12 8.4Z"/>',
-  diamond:'<path d="M6.2 3.2h11.6l3.4 5.4L12 20.8 2.8 8.6z"/><path d="M2.8 8.6h18.4"/><path d="M9.2 3.2 7.6 8.6 12 20.8l4.4-12.2-1.6-5.4"/>',
-  cap:'<path d="M2.6 8.6 12 4.6l9.4 4-9.4 4z"/><path d="M6.6 11v5c0 1.35 2.4 2.45 5.4 2.45s5.4-1.1 5.4-2.45v-5"/><path d="M21.4 8.6v5.2"/>',
-  laptop:'<rect x="4.2" y="5.2" width="15.6" height="10" rx="1.8"/><path d="M2.2 18.4h19.6"/>',
-  heart:'<path d="M20.3 6.7a4.55 4.55 0 0 0-6.9-.6L12 7.4l-1.4-1.3a4.55 4.55 0 0 0-6.9 5.9l7 7.2a2 2 0 0 0 2.8 0l6.9-7.2a4.55 4.55 0 0 0-.1-5.3Z"/>',
-  sofa:'<path d="M4.6 11.2V8.1a2 2 0 0 1 2-2h10.8a2 2 0 0 1 2 2v3.1"/><path d="M2.6 13.2a2 2 0 0 1 4 0v2.2h10.8v-2.2a2 2 0 0 1 4 0v5.6H2.6z"/>',
-  target:'<circle cx="12" cy="12" r="8.6"/><circle cx="12" cy="12" r="4.4"/><circle cx="12" cy="12" r="1.1" fill="currentColor" stroke="none"/>',
-  note:'<rect x="2.6" y="6.2" width="18.8" height="11.6" rx="2.4"/><circle cx="12" cy="12" r="2.5"/><path d="M6.2 9.6v4.8M17.8 9.6v4.8"/>'
+  home:{ s:'<path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/><path d="M9.5 20v-6h5v6"/>',
+    f:'<path d="M5.5 8.4 12 3.2l6.5 5.2V20h-13z"/>' },
+  landmark:{ s:'<path d="M3 9.5 12 4l9 5.5"/><path d="M5.5 10.5v7.5M9.8 10.5v7.5M14.2 10.5v7.5M18.5 10.5v7.5"/><path d="M3.5 20.5h17"/>',
+    f:'<path d="M3 9.5 12 4l9 5.5z"/><rect x="4.4" y="10.5" width="15.2" height="7.5" rx=".6" opacity=".5"/>' },
+  zap:{ s:'<path d="M13.2 2.5 4.8 13.6h6.1l-.9 7.9 8.3-11.2h-6.2z"/>',
+    f:'<path d="M13.2 2.5 4.8 13.6h6.1l-.9 7.9 8.3-11.2h-6.2z"/>' },
+  flame:{ s:'<path d="M12 21.5c3.6 0 6.2-2.4 6.2-5.7 0-4.3-4.3-6.3-4.3-9.6 0 0-1.9 1.4-1.9 3.8 0 1.4-1 1.9-1.5 1.1-.4-.6-.8-1.5-.8-2.4-1.9 1.7-3.9 3.8-3.9 7.6 0 3.3 2.6 5.2 6.2 5.2Z"/>',
+    f:'<path d="M12 21.5c3.6 0 6.2-2.4 6.2-5.7 0-4.3-4.3-6.3-4.3-9.6 0 0-1.9 1.4-1.9 3.8 0 1.4-1 1.9-1.5 1.1-.4-.6-.8-1.5-.8-2.4-1.9 1.7-3.9 3.8-3.9 7.6 0 3.3 2.6 5.2 6.2 5.2Z"/>' },
+  droplet:{ s:'<path d="M12 3s5.8 6 5.8 10.2A5.8 5.8 0 0 1 6.2 13.2C6.2 9 12 3 12 3Z"/>',
+    f:'<path d="M12 3s5.8 6 5.8 10.2A5.8 5.8 0 0 1 6.2 13.2C6.2 9 12 3 12 3Z"/>' },
+  wifi:{ s:'<path d="M2.8 9.2a14.5 14.5 0 0 1 18.4 0"/><path d="M6 12.6a9.6 9.6 0 0 1 12 0"/><path d="M9.2 16a5 5 0 0 1 5.6 0"/><circle cx="12" cy="19.4" r="1.15" fill="currentColor" stroke="none"/>',
+    f:'<path d="M12 19.4 2.8 9.2a14.5 14.5 0 0 1 18.4 0z"/>' },
+  phone:{ s:'<rect x="6.5" y="2.5" width="11" height="19" rx="2.6"/><path d="M10.4 18.6h3.2"/>',
+    f:'<rect x="6.5" y="2.5" width="11" height="19" rx="2.6"/>' },
+  cart:{ s:'<path d="M2.6 3.6h2.2l2.3 11.1a2 2 0 0 0 2 1.6h7.5a2 2 0 0 0 2-1.55l1.35-6.1H6"/><circle cx="9.6" cy="19.9" r="1.45"/><circle cx="17" cy="19.9" r="1.45"/>',
+    f:'<path d="M5.85 8.65h14.1l-1.35 6.1a2 2 0 0 1-2 1.55H9.1a2 2 0 0 1-2-1.6z"/>' },
+  bus:{ s:'<rect x="3.6" y="3.5" width="16.8" height="13" rx="2.6"/><path d="M3.6 10.4h16.8"/><path d="M6.8 16.5v2.6M17.2 16.5v2.6"/><circle cx="8.1" cy="13.5" r=".95" fill="currentColor" stroke="none"/><circle cx="15.9" cy="13.5" r=".95" fill="currentColor" stroke="none"/>',
+    f:'<rect x="3.6" y="3.5" width="16.8" height="13" rx="2.6"/>' },
+  fuel:{ s:'<path d="M4.5 20.8V5.2a2 2 0 0 1 2-2h4.6a2 2 0 0 1 2 2v15.6"/><path d="M3.2 20.8h11.2"/><path d="M6.9 8.4h3.8"/><path d="M13.1 9.2h3.2a1.5 1.5 0 0 1 1.5 1.5v5.9a1.6 1.6 0 0 0 3.2 0v-5.4l-2.4-2.9"/>',
+    f:'<path d="M4.5 20.8V5.2a2 2 0 0 1 2-2h4.6a2 2 0 0 1 2 2v15.6z"/>' },
+  tv:{ s:'<rect x="2.6" y="6.6" width="18.8" height="12" rx="2.6"/><path d="M8.2 3.4 12 6.4l3.8-3"/><path d="M10.6 10.5 14.8 12.6l-4.2 2.1z" fill="currentColor" stroke="none"/>',
+    f:'<rect x="2.6" y="6.6" width="18.8" height="12" rx="2.6"/>' },
+  shield:{ s:'<path d="M12 2.6 4.8 5.4v5.9c0 4.5 3 8.2 7.2 9.8 4.2-1.6 7.2-5.3 7.2-9.8V5.4z"/><path d="M9.2 11.9l2.1 2.1 3.9-4"/>',
+    f:'<path d="M12 2.6 4.8 5.4v5.9c0 4.5 3 8.2 7.2 9.8 4.2-1.6 7.2-5.3 7.2-9.8V5.4z"/>' },
+  dumbbell:{ s:'<path d="M3 9.2v5.6M6.2 6.8v10.4M17.8 6.8v10.4M21 9.2v5.6M6.2 12h11.6"/>',
+    f:'<rect x="4.9" y="6.8" width="2.6" height="10.4" rx="1.1"/><rect x="16.5" y="6.8" width="2.6" height="10.4" rx="1.1"/>' },
+  utensils:{ s:'<path d="M5.4 2.6v6.6a2.4 2.4 0 0 0 4.8 0V2.6"/><path d="M7.8 9.4V21.4"/><path d="M18.2 2.6c-1.9 1.5-2.9 3.4-2.9 5.8s.9 3.4 2.9 3.9v9.1"/>',
+    f:'<path d="M5.4 2.6v6.6a2.4 2.4 0 0 0 4.8 0V2.6z"/><path d="M18.2 2.6c-1.9 1.5-2.9 3.4-2.9 5.8s.9 3.4 2.9 3.9z"/>' },
+  stroller:{ s:'<path d="M3.6 12.4h13V9.1A6.5 6.5 0 0 0 10.1 2.6"/><path d="M3.6 12.4a6.5 6.5 0 0 0 13 0"/><path d="M6.8 17.2 8.1 14M13.9 17.2 12.6 14"/><circle cx="6.2" cy="19.1" r="1.6"/><circle cx="14.4" cy="19.1" r="1.6"/>',
+    f:'<path d="M3.6 12.4a6.5 6.5 0 0 0 13 0z"/><path d="M16.6 12.4V9.1A6.5 6.5 0 0 0 10.1 2.6v9.8z" opacity=".6"/>' },
+  coins:{ s:'<ellipse cx="12" cy="6.4" rx="6.8" ry="2.9"/><path d="M5.2 6.4v5c0 1.6 3 2.9 6.8 2.9s6.8-1.3 6.8-2.9v-5"/><path d="M5.2 11.4v5c0 1.6 3 2.9 6.8 2.9s6.8-1.3 6.8-2.9v-5"/>',
+    f:'<path d="M5.2 6.4v10c0 1.6 3 2.9 6.8 2.9s6.8-1.3 6.8-2.9v-10c0-1.6-3-2.9-6.8-2.9s-6.8 1.3-6.8 2.9z"/>' },
+  card:{ s:'<rect x="2.6" y="5.2" width="18.8" height="13.6" rx="2.6"/><path d="M2.6 10.1h18.8"/><path d="M6.2 14.8h4.2"/>',
+    f:'<rect x="2.6" y="5.2" width="18.8" height="13.6" rx="2.6"/>' },
+  receipt:{ s:'<path d="M5.6 2.6h12.8v18.8l-2.15-1.45-2.15 1.45-2.1-1.45-2.15 1.45-2.1-1.45L5.6 21.4z"/><path d="M9 8.2h6M9 12.1h6"/>',
+    f:'<path d="M5.6 2.6h12.8v18.8l-2.15-1.45-2.15 1.45-2.1-1.45-2.15 1.45-2.1-1.45L5.6 21.4z"/>' },
+  lifebuoy:{ s:'<circle cx="12" cy="12" r="8.6"/><circle cx="12" cy="12" r="3.5"/><path d="M6 6l3.5 3.5M18 6l-3.5 3.5M6 18l3.5-3.5M18 18l-3.5-3.5"/>',
+    f:'<path fill-rule="evenodd" d="M12 3.4a8.6 8.6 0 1 1 0 17.2 8.6 8.6 0 0 1 0-17.2Zm0 5.1a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/>' },
+  plane:{ s:'<path d="M21 15.4 13.4 11.9V5.1a1.45 1.45 0 0 0-2.9 0v6.8L3 15.4v2.1l7.5-2.2v3.4L8 20.5v1.5l4-1.15 4 1.15v-1.5l-2.5-1.75v-3.4L21 17.5z"/>',
+    f:'<path d="M21 15.4 13.4 11.9V5.1a1.45 1.45 0 0 0-2.9 0v6.8L3 15.4v2.1l7.5-2.2v3.4L8 20.5v1.5l4-1.15 4 1.15v-1.5l-2.5-1.75v-3.4L21 17.5z"/>' },
+  car:{ s:'<path d="M4.2 15.4l1.7-5.8a2 2 0 0 1 1.95-1.5h8.3a2 2 0 0 1 1.95 1.5l1.7 5.8"/><path d="M3.8 15.4h16.4"/><path d="M5.8 15.4v3.3h3v-3.3M15.2 15.4v3.3h3v-3.3"/><circle cx="7.6" cy="12.7" r=".95" fill="currentColor" stroke="none"/><circle cx="16.4" cy="12.7" r=".95" fill="currentColor" stroke="none"/>',
+    f:'<path d="M4.2 15.4l1.7-5.8a2 2 0 0 1 1.95-1.5h8.3a2 2 0 0 1 1.95 1.5l1.7 5.8z"/>' },
+  gift:{ s:'<rect x="3.2" y="8.4" width="17.6" height="4.1" rx="1.2"/><path d="M4.9 12.5v8.9h14.2v-8.9"/><path d="M12 8.4v13"/><path d="M12 8.4S9.6 8.5 8.4 7.3a2.25 2.25 0 0 1 3.15-3.15C12.7 5.3 12 8.4 12 8.4Z"/><path d="M12 8.4s2.4.1 3.6-1.1a2.25 2.25 0 0 0-3.15-3.15C11.3 5.3 12 8.4 12 8.4Z"/>',
+    f:'<rect x="3.2" y="8.4" width="17.6" height="4.1" rx="1.2"/><path d="M4.9 12.5h14.2v8.9H4.9z" opacity=".6"/>' },
+  diamond:{ s:'<path d="M6.2 3.2h11.6l3.4 5.4L12 20.8 2.8 8.6z"/><path d="M2.8 8.6h18.4"/><path d="M9.2 3.2 7.6 8.6 12 20.8l4.4-12.2-1.6-5.4"/>',
+    f:'<path d="M6.2 3.2h11.6l3.4 5.4L12 20.8 2.8 8.6z"/>' },
+  cap:{ s:'<path d="M2.6 8.6 12 4.6l9.4 4-9.4 4z"/><path d="M6.6 11v5c0 1.35 2.4 2.45 5.4 2.45s5.4-1.1 5.4-2.45v-5"/><path d="M21.4 8.6v5.2"/>',
+    f:'<path d="M2.6 8.6 12 4.6l9.4 4-9.4 4z"/>' },
+  laptop:{ s:'<rect x="4.2" y="5.2" width="15.6" height="10" rx="1.8"/><path d="M2.2 18.4h19.6"/>',
+    f:'<rect x="4.2" y="5.2" width="15.6" height="10" rx="1.8"/>' },
+  heart:{ s:'<path d="M20.3 6.7a4.55 4.55 0 0 0-6.9-.6L12 7.4l-1.4-1.3a4.55 4.55 0 0 0-6.9 5.9l7 7.2a2 2 0 0 0 2.8 0l6.9-7.2a4.55 4.55 0 0 0-.1-5.3Z"/>',
+    f:'<path d="M20.3 6.7a4.55 4.55 0 0 0-6.9-.6L12 7.4l-1.4-1.3a4.55 4.55 0 0 0-6.9 5.9l7 7.2a2 2 0 0 0 2.8 0l6.9-7.2a4.55 4.55 0 0 0-.1-5.3Z"/>' },
+  sofa:{ s:'<path d="M4.6 11.2V8.1a2 2 0 0 1 2-2h10.8a2 2 0 0 1 2 2v3.1"/><path d="M2.6 13.2a2 2 0 0 1 4 0v2.2h10.8v-2.2a2 2 0 0 1 4 0v5.6H2.6z"/>',
+    f:'<path d="M2.6 13.2a2 2 0 0 1 4 0v2.2h10.8v-2.2a2 2 0 0 1 4 0v5.6H2.6z"/><path d="M4.6 11.2V8.1a2 2 0 0 1 2-2h10.8a2 2 0 0 1 2 2v3.1z" opacity=".55"/>' },
+  target:{ s:'<circle cx="12" cy="12" r="8.6"/><circle cx="12" cy="12" r="4.4"/><circle cx="12" cy="12" r="1.1" fill="currentColor" stroke="none"/>',
+    f:'<path fill-rule="evenodd" d="M12 3.4a8.6 8.6 0 1 1 0 17.2 8.6 8.6 0 0 1 0-17.2Zm0 4.2a4.4 4.4 0 1 0 0 8.8 4.4 4.4 0 0 0 0-8.8Z"/>' },
+  note:{ s:'<rect x="2.6" y="6.2" width="18.8" height="11.6" rx="2.4"/><circle cx="12" cy="12" r="2.5"/><path d="M6.2 9.6v4.8M17.8 9.6v4.8"/>',
+    f:'<rect x="2.6" y="6.2" width="18.8" height="11.6" rx="2.4"/>' },
+  clock:{ s:'<circle cx="12" cy="12" r="8.6"/><path d="M12 7.3V12l3.2 2.1"/>',
+    f:'<circle cx="12" cy="12" r="8.6"/>' },
+  carry:{ s:'<path d="M4.4 12.4a7.6 7.6 0 0 1 12.9-5.2"/><path d="M18.2 3.2l-.6 4.3-4.3-.5"/><ellipse cx="12" cy="16.9" rx="6.2" ry="2.4"/><path d="M5.8 16.9v1.6c0 1.3 2.8 2.4 6.2 2.4s6.2-1.1 6.2-2.4v-1.6"/>',
+    f:'<path d="M5.8 16.9v1.6c0 1.3 2.8 2.4 6.2 2.4s6.2-1.1 6.2-2.4v-1.6c0-1.3-2.8-2.4-6.2-2.4s-6.2 1.1-6.2 2.4z"/>' }
 };
 function glyphSvg(name, size, color){
   const s = document.createElement("span");
   s.className = "pf-gl"; s.style.width = size+"px"; s.style.height = size+"px";
   if (color) s.style.color = color;
-  s.innerHTML = '<svg viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">' + (GLYPH[name] || GLYPH.target) + '</svg>';
+  const g = GLYPH[name] || GLYPH.target;
+  s.innerHTML = '<svg viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">'
+    + (g.f ? '<g class="pf-glf" fill="currentColor" stroke="none">' + g.f + '</g>' : '') + g.s + '</svg>';
   return s;
 }
 
@@ -88,7 +133,8 @@ const SVG = {
   download:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14"/></svg>',
   up:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5m0 0-6 6m6-6 6 6"/></svg>',
   down:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14m0 0 6-6m-6 6-6-6"/></svg>',
-  upload:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V9m0 0 4 4m-4-4-4 4M5 3h14"/></svg>'
+  upload:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V9m0 0 4 4m-4-4-4 4M5 3h14"/></svg>',
+  palette:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3C7 3 3 6.8 3 11.6 3 16.4 6.9 20 11.4 20c1.2 0 2-.8 2-1.8 0-.5-.2-.9-.5-1.2-.3-.4-.5-.8-.5-1.2 0-1 .8-1.8 1.8-1.8h2.3c3 0 5.5-2.3 5.5-5.3C22 5.2 17.6 3 12 3Z"/><circle cx="7.4" cy="11.6" r="1.65" fill="#FF4D7E" stroke="none"/><circle cx="9.9" cy="7.4" r="1.65" fill="#FF9F1C" stroke="none"/><circle cx="14.6" cy="6.9" r="1.65" fill="#2EE59D" stroke="none"/><circle cx="18" cy="10" r="1.65" fill="#7C5CFF" stroke="none"/></svg>'
 };
 
 /* ---------------------------------- helpers -------------------------------- */
@@ -96,6 +142,8 @@ const uid = () => (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : D
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 const round2 = (n) => Math.round(n * 100) / 100;
 function tint(hex, a){ const s = hex.replace("#",""); const r=parseInt(s.slice(0,2),16), g=parseInt(s.slice(2,4),16), b=parseInt(s.slice(4,6),16); return "rgba("+r+","+g+","+b+","+a+")"; }
+/* two-tone wash behind an icon tile */
+function tileBg(hex){ return "linear-gradient(145deg, "+tint(hex,0.25)+", "+tint(hex,0.1)+")"; }
 const ordinal = (n) => { const s=["th","st","nd","rd"], v=n%100; return n+(s[(v-20)%10]||s[v]||s[0]); };
 const CUR = () => state.currency || "\u00A3";
 function money0(n){ const v=Math.round(n); return (v<0?"-":"")+CUR()+Math.abs(v).toLocaleString("en-GB"); }
@@ -161,12 +209,12 @@ function makeDefaults(){
       { id: uid(), glyph: "lifebuoy", name: "Emergency fund", target: 3000, saved: 750, color: "#00C48C", targetDate: null },
       { id: uid(), glyph: "plane", name: "Holiday", target: 1500, saved: 420, color: "#6D28D9", targetDate: SEED_BY }
     ],
-    history: [], lastCycleId: null, carryOver: true,
+    history: [], lastCycleId: null, carryOver: true, carryEdits: {},
     deductions: { on: true, tax: 20, niMode: "main", niFreq: "weekly", pensionOn: false, pension: 9.8 },
     updatedAt: 0
   };
 }
-function blank(){ return { salary:0, currency:"\u00A3", payDay:25, expenses:[], shifts:[], paid:{}, goals:[], history:[], lastCycleId:null, carryOver:true,
+function blank(){ return { salary:0, currency:"\u00A3", payDay:25, expenses:[], shifts:[], paid:{}, goals:[], history:[], lastCycleId:null, carryOver:true, carryEdits:{},
   deductions:{ on:true, tax:20, niMode:"main", niFreq:"weekly", pensionOn:false, pension:9.8 }, updatedAt:0 }; }
 function normalize(o){
   const s = Object.assign(blank(), o || {});
@@ -175,6 +223,13 @@ function normalize(o){
   if (!s.currency) s.currency = "\u00A3";
   if (!s.payDay) s.payDay = 25;
   if (typeof s.carryOver !== "boolean") s.carryOver = true;
+  /* hand-edited carry-over amounts, keyed by the cycle they carry INTO ("YYYY-MM") */
+  const ce = {};
+  if (s.carryEdits && typeof s.carryEdits === "object" && !Array.isArray(s.carryEdits)){
+    Object.keys(s.carryEdits).forEach(function(k){ const v = Number(s.carryEdits[k]);
+      if (/^\d{4}-\d{2}$/.test(k) && s.carryEdits[k] !== null && s.carryEdits[k] !== "" && Number.isFinite(v)) ce[k] = round2(v); });
+  }
+  s.carryEdits = ce;
   const dd = s.deductions || {};
   let niMode = dd.niMode;
   if (!niMode) niMode = (dd.ni === 2) ? "upper" : (dd.ni === 0) ? "off" : "main";
@@ -214,12 +269,17 @@ function shiftCycleId(id, delta){
   return y + "-" + String(m + 1).padStart(2, "0");
 }
 function histFor(id){ return state.history.filter(function(x){ return x.cycleId === id; })[0] || null; }
-/* what last cycle finished with, carried into this one */
-function carriedOver(){
-  if (!state.carryOver) return 0;
-  const prev = histFor(shiftCycleId(cyc().id, -1));
-  return prev ? (prev.saved || 0) : 0;
+/* what the previous cycle finished with, before any hand edit */
+function carryWorkedOut(id){ const prev = histFor(shiftCycleId(id, -1)); return prev ? (prev.saved || 0) : 0; }
+/* an amount you typed in for a cycle's carry-over, or null */
+function carryEdited(id){
+  const ce = state.carryEdits;
+  const v = (ce && Object.prototype.hasOwnProperty.call(ce, id)) ? ce[id] : null;
+  return (typeof v === "number" && Number.isFinite(v)) ? v : null;
 }
+/* what actually carries into a cycle: your edit if you made one, otherwise last cycle's leftover */
+function carryFor(id){ if (!state.carryOver) return 0; const e = carryEdited(id); return e != null ? e : carryWorkedOut(id); }
+function carriedOver(){ return carryFor(cyc().id); }
 function income(){ return (state.salary||0) + bankTotal() + carriedOver(); }
 /* net for this cycle alone, ignoring anything carried in */
 function ownSaved(){ return remaining() - carriedOver(); }
@@ -319,7 +379,7 @@ function remainingCost(e){ const n = paymentsLeft(e); return n == null ? null : 
 function expTotal(){ return activeExpenses().reduce(function(a,e){ return a+(e.amount||0); }, 0); }
 function remaining(){ return income() - expTotal(); }
 function pctRemain(){ const i = income(); return i > 0 ? remaining()/i : 0; }
-function ringColor(){ const r = remaining(), i = income(); return r < 0 ? "#FF6B8A" : (i > 0 && r/i < 0.15) ? "#FFC53D" : "#2DE1A8"; }
+function ringColor(){ const r = remaining(), i = income(); return r < 0 ? "var(--ring-neg)" : (i > 0 && r/i < 0.15) ? "var(--ring-low)" : "var(--ring-ok)"; }
 const pk = (id) => cyc().id + "__" + id;
 function monthlySavings(){ return state.expenses.filter(function(e){ return e.category==="savings"; }).reduce(function(a,e){ return a+(e.amount||0); }, 0); }
 
@@ -335,6 +395,13 @@ function delGoal(id){ state.goals = state.goals.filter(function(x){ return x.id!
 function addContribution(id, amt){ const g = state.goals.find(function(x){ return x.id===id; }); if (g) g.saved = round2((g.saved||0)+amt); commit(); }
 function addHistory(rec){ state.history = state.history.filter(function(x){ return x.cycleId!==rec.cycleId; }); state.history.push(rec); commit(); }
 function delHistory(cycleId){ state.history = state.history.filter(function(x){ return x.cycleId!==cycleId; }); commit(); }
+/* null clears the edit; typing the worked-out figure also clears it, so later history changes still flow through */
+function setCarryEdit(id, v){
+  if (!state.carryEdits || typeof state.carryEdits !== "object") state.carryEdits = {};
+  if (v == null || round2(v) === round2(carryWorkedOut(id))) delete state.carryEdits[id];
+  else state.carryEdits[id] = round2(v);
+  commit();
+}
 function doReset(){ state = makeDefaults(); state.lastCycleId = getCycle(state.payDay||25, NOW).id; state.updatedAt = Date.now(); persistLocal(); renderApp(); pushSoon(); closeSheet(); toast("Reset to starter setup"); }
 
 function archiveCycle(id){
@@ -346,8 +413,7 @@ function archiveCycle(id){
     return (t >= start.getTime() && t < end.getTime()) ? a + (s.amount || 0) : a;
   }, 0);
   const expenses = activeExpenses(id).reduce(function(a, e){ return a + (e.amount || 0); }, 0);
-  const prev = histFor(shiftCycleId(id, -1));
-  const carriedIn = (state.carryOver && prev) ? (prev.saved || 0) : 0;
+  const carriedIn = carryFor(id);
   const inc = (state.salary || 0) + shiftsTotal + carriedIn;
   state.history.push({
     cycleId: id, label: start.toLocaleDateString("en-GB", { month: "short", year: "numeric" }),
@@ -359,6 +425,8 @@ function archiveIfRolled(){
   const curId = getCycle(state.payDay || 25, NOW).id;
   if (!state.lastCycleId){ state.lastCycleId = curId; persistLocal(); return; }
   if (state.lastCycleId === curId) return;
+  /* payday moved later (or the clock went back): nothing has finished, so just move the marker */
+  if (state.lastCycleId > curId){ state.lastCycleId = curId; state.updatedAt = Date.now(); persistLocal(); return; }
   /* close off every cycle between the last one we saw and today */
   let id = state.lastCycleId, guard = 0;
   while (id !== curId && guard++ < 240){ archiveCycle(id); id = shiftCycleId(id, 1); }
@@ -397,7 +465,7 @@ function onSyncTap(){ const on = localStorage.getItem(LS_DRIVE_ON)==="1"; if (on
 function buildRing(pct, color){
   const size=178, stroke=15, r=(size-stroke)/2, c=2*Math.PI*r, p=clamp(pct,0,1);
   const bg = svgEl("circle",{cx:size/2,cy:size/2,r:r,fill:"none",stroke:"rgba(255,255,255,0.14)","stroke-width":stroke});
-  const fg = svgEl("circle",{"class":"pf-ringfill",cx:size/2,cy:size/2,r:r,fill:"none",stroke:color,"stroke-width":stroke,"stroke-linecap":"round","stroke-dasharray":c});
+  const fg = svgEl("circle",{"class":"pf-ringfill",cx:size/2,cy:size/2,r:r,fill:"none",style:"stroke:"+color,"stroke-width":stroke,"stroke-linecap":"round","stroke-dasharray":c});
   const finalOff = c*(1-p);
   if (FIRST){ fg.style.strokeDashoffset = c; pendingGrow.push({el:fg, prop:"strokeDashoffset", val:String(finalOff)}); } else fg.style.strokeDashoffset = finalOff;
   return svgEl("svg",{width:size,height:size,style:"transform:rotate(-90deg)"}, bg, fg);
@@ -419,7 +487,9 @@ function renderApp(){
   /* header + sync */
   app.appendChild(h("header",{class:"pf-header"},
     h("div",{}, h("div",{class:"pf-eyebrow"},"Pay cycle"), h("h1",{class:"pf-h1"}, titleRange)),
-    h("button",{class:"pf-gear","aria-label":"Settings", onClick:openSettings}, icon("gear",19))
+    h("div",{class:"pf-headbtns"},
+      h("button",{class:"pf-themebtn","aria-label":"Change theme", onClick:openThemes}, icon("palette",22)),
+      h("button",{class:"pf-gear","aria-label":"Settings", onClick:openSettings}, icon("gear",19)))
   ));
   app.appendChild(h("div",{class:"pf-syncbar"}, syncChip()));
 
@@ -428,7 +498,7 @@ function renderApp(){
   ringWrap.appendChild(buildRing(pctRemain(), ringColor()));
   ringWrap.appendChild(h("div",{class:"pf-ringcenter"},
     h("span",{class:"pf-ringlab"},"Left this cycle"),
-    h("span",{class:"pf-ringnum", style:{color: remaining()<0?"#FFC9B8":"#FFFFFF"}}, money0(remaining())),
+    h("span",{class:"pf-ringnum", style:{color: remaining()<0?"var(--hero-neg-ink)":"#FFFFFF"}}, money0(remaining())),
     h("span",{class:"pf-ringsub"}, income()>0 ? "of "+money0(income())+" in" : "set your salary below")
   ));
   const cycFill = h("div",{class:"pf-cyclefill"}); growW(cycFill, elapsed);
@@ -456,19 +526,23 @@ function renderApp(){
   const incomeCard = h("section",{class:"pf-card"});
   incomeCard.appendChild(cardHead("Income", money2(income()), "pf-pos"));
   incomeCard.appendChild(h("div",{class:"pf-exp", role:"button", tabindex:"0", onClick:openSalary, onKeydown:onKey(openSalary)},
-    h("span",{class:"pf-ic", style:{background:tint("#00C48C",0.15)}}, glyphSvg("note",21,"#00A578")),
+    h("span",{class:"pf-ic pf-ic--pos"}, glyphSvg("note",21,"var(--pos)")),
     h("div",{class:"pf-expmid"}, h("span",{class:"pf-expname"},"Monthly salary"), h("span",{class:"pf-expcat"},"Paid on the "+ordinal(state.payDay)+" \u00B7 take-home")),
     h("span",{class:"pf-expamt"}, money2(state.salary))
   ));
-  const carried = carriedOver();
-  if (carried !== 0){
-    const prevLbl = (histFor(shiftCycleId(C.id,-1))||{}).label || "last cycle";
-    incomeCard.appendChild(h("div",{class:"pf-exp", role:"button", tabindex:"0", onClick:openSettings, onKeydown:onKey(openSettings)},
-      h("span",{class:"pf-ic", style:{background:tint("#6D28D9",0.14)}}, glyphSvg("coins",20,"#6D28D9")),
+  if (state.carryOver){
+    const carried = carriedOver();
+    const prevId = shiftCycleId(C.id,-1), prevRec = histFor(prevId);
+    const prevLbl = prevRec ? prevRec.label : monthLabel(prevId);
+    const edited = carryEdited(C.id) != null;
+    const sub = edited ? "You changed this \u00B7 worked out "+signed(carryWorkedOut(C.id))
+      : prevRec ? "Left at the end of "+prevLbl : "Tap to add what you had left from "+prevLbl;
+    incomeCard.appendChild(h("div",{class:"pf-exp", role:"button", tabindex:"0", "aria-label":"Edit carried over", onClick:openCarry, onKeydown:onKey(openCarry)},
+      h("span",{class:"pf-ic pf-ic--acc"}, glyphSvg("carry",21,"var(--accent)")),
       h("div",{class:"pf-expmid"},
         h("span",{class:"pf-expname"},"Carried over"),
-        h("span",{class:"pf-expcat"}, "What was left at the end of "+prevLbl)),
-      h("span",{class:"pf-expamt "+(carried>=0?"pf-pos":"pf-neg")}, (carried>=0?"+":"")+money2(carried))
+        h("span",{class:"pf-expcat"}, sub)),
+      h("span",{class:"pf-expamt "+(carried>0?"pf-pos":carried<0?"pf-neg":"pf-muted2")}, carried ? signed(carried) : money2(0))
     ));
   }
   incomeCard.appendChild(h("div",{class:"pf-subhead"},
@@ -480,7 +554,7 @@ function renderApp(){
   if (shifts.length){
     shifts.forEach(function(s){
       shiftList.appendChild(h("div",{class:"pf-exp", role:"button", tabindex:"0", onClick:function(){ openShift(s); }, onKeydown:onKey(function(){ openShift(s); })},
-        h("span",{class:"pf-ic pf-ic--bank"}, glyphSvg("landmark",20,"#00A578")),
+        h("span",{class:"pf-ic pf-ic--pos"}, glyphSvg("clock",21,"var(--pos)")),
         h("div",{class:"pf-expmid"},
           h("span",{class:"pf-expname"}, s.label || "Bank shift"),
           h("span",{class:"pf-expcat"}, new Date(s.date+"T00:00:00").toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"}) + ((s.hours&&s.rate) ? " \u00B7 "+s.hours+"h \u00D7 "+CUR()+s.rate : ""),
@@ -513,7 +587,7 @@ function renderApp(){
       }
       const fill = h("div",{class:"pf-goalfill", style:{background:g.color}}); growW(fill, pct);
       const row = h("div",{class:"pf-goalrow", role:"button", tabindex:"0", onClick:function(){ openGoal(g); }, onKeydown:onKey(function(){ openGoal(g); })},
-        h("span",{class:"pf-goalemoji", style:{background:tint(g.color,0.15)}}, glyphSvg(g.glyph,22,g.color)),
+        h("span",{class:"pf-goalemoji", style:{background:tileBg(g.color)}}, glyphSvg(g.glyph,22,g.color)),
         h("div",{class:"pf-goalmid"},
           h("div",{class:"pf-goaltop"},
             h("span",{class:"pf-goalname"}, g.name),
@@ -560,7 +634,7 @@ function renderApp(){
       const chk = h("button",{class:"pf-check"+(isPaid?" pf-check--on":""), "aria-label":isPaid?"Mark as not paid":"Mark as paid", onClick:function(ev){ ev.stopPropagation(); togglePaid(e.id); }});
       if (isPaid) chk.appendChild(icon("check",14));
       expList.appendChild(h("div",{class:"pf-exp"+(isPaid?" pf-exp--paid":""), role:"button", tabindex:"0", onClick:function(){ openExpense(e); }, onKeydown:onKey(function(){ openExpense(e); })},
-        h("span",{class:"pf-ic", style:{background:tint(c.color,0.15)}}, glyphSvg(c.glyph,21,c.color)),
+        h("span",{class:"pf-ic", style:{background:tileBg(c.color)}}, glyphSvg(c.glyph,21,c.color)),
         h("div",{class:"pf-expmid"},
           h("span",{class:"pf-expname"}, e.name),
           h("span",{class:"pf-expcat"}, c.label, (function(){
@@ -589,7 +663,7 @@ function renderApp(){
       const p = e.endsOn.split("-").map(Number);
       const endLbl = new Date(p[0],p[1]-1,1).toLocaleDateString("en-GB",{month:"short",year:"numeric"});
       finList.appendChild(h("div",{class:"pf-exp pf-exp--fin"},
-        h("span",{class:"pf-ic", style:{background:"#F1ECFB"}}, glyphSvg(c.glyph,21,"#A49DBA")),
+        h("span",{class:"pf-ic pf-ic--mute"}, glyphSvg(c.glyph,21,"var(--ink-4)")),
         h("div",{class:"pf-expmid", role:"button", tabindex:"0", onClick:function(){ openExpense(e); }, onKeydown:onKey(function(){ openExpense(e); })},
           h("span",{class:"pf-expname"}, e.name),
           h("span",{class:"pf-expcat"}, "Paid off \u00B7 last payment "+endLbl)),
@@ -725,7 +799,7 @@ function openExpense(existing){
     CAT_ORDER.forEach(function(k){
       const c = CAT[k]; const sel = k===cat;
       const chip = h("button",{type:"button", class:"pf-catchip"+(sel?" pf-catchip--on":""), onClick:function(){ cat=k; if (!name.value.trim()) name.value=c.label; paint(); }},
-        h("span",{class:"pf-catic", style:{background:tint(c.color,0.15)}}, glyphSvg(c.glyph,19,c.color)),
+        h("span",{class:"pf-catic", style:{background:tileBg(c.color)}}, glyphSvg(c.glyph,19,c.color)),
         h("span",{class:"pf-catlab"}, c.label));
       if (sel){ chip.style.borderColor = c.color; chip.style.background = tint(c.color,0.10); }
       grid.appendChild(chip);
@@ -808,7 +882,7 @@ function openGoal(existing){
   const by = h("input",{class:"pf-input", type:"month", value: (existing&&existing.targetDate)?existing.targetDate:""});
   const egrid = h("div",{class:"pf-emojigrid"});
   const crow = h("div",{class:"pf-colorrow"});
-  function paintE(){ egrid.innerHTML=""; GOAL_GLYPHS.forEach(function(e){ const sel=e===glyph; const b=h("button",{type:"button", class:"pf-emoji"+(sel?" pf-emoji--on":""), onClick:function(){ glyph=e; paintE(); }}, glyphSvg(e,21,sel?color:"#8A93A8")); if (sel){ b.style.borderColor=color; b.style.background=tint(color,0.12); } egrid.appendChild(b); }); }
+  function paintE(){ egrid.innerHTML=""; GOAL_GLYPHS.forEach(function(e){ const sel=e===glyph; const b=h("button",{type:"button", class:"pf-emoji"+(sel?" pf-emoji--on":""), onClick:function(){ glyph=e; paintE(); }}, glyphSvg(e,21,sel?color:"var(--ink-3)")); if (sel){ b.style.borderColor=color; b.style.background=tint(color,0.12); } egrid.appendChild(b); }); }
   function paintC(){ crow.innerHTML=""; GOAL_COLORS.forEach(function(c){ const sel=c===color; const b=h("button",{type:"button", class:"pf-swatch"+(sel?" pf-swatch--on":""), style:{background:c}, "aria-label":"Pick colour", onClick:function(){ color=c; paintE(); paintC(); }}); crow.appendChild(b); }); }
   paintE(); paintC();
   const act = h("div",{class:"pf-actions"});
@@ -853,7 +927,7 @@ function openHistAdd(){
   const inc = amtInput(""); const out = amtInput("");
   const prev2 = h("div",{class:"pf-newtotal"});
   function upd(){ const i=parseFloat(inc._input.value)||0, o=parseFloat(out._input.value)||0, net=i-o; prev2.innerHTML="";
-    prev2.appendChild(document.createTextNode("Saved that month: ")); prev2.appendChild(h("strong",{style:{color:net>=0?"#2F8E7B":"#C25840"}}, (net<0?"-":"")+CUR()+Math.abs(Math.round(net)).toLocaleString("en-GB"))); }
+    prev2.appendChild(document.createTextNode("Saved that month: ")); prev2.appendChild(h("strong",{style:{color:net>=0?"var(--pos)":"var(--neg)"}}, (net<0?"-":"")+CUR()+Math.abs(Math.round(net)).toLocaleString("en-GB"))); }
   inc._input.addEventListener("input", upd); out._input.addEventListener("input", upd); upd();
   openSheet("Add a past month", h("div",{},
     h("p",{class:"pf-help"},"Add a month you already know the figures for. Finished months are saved automatically each payday."),
@@ -900,6 +974,90 @@ function exportData(){
 
 let toastT = null;
 function toast(msg){ const t = document.getElementById("pf-toast"); if (!t) return; t.textContent = msg; t.classList.add("pf-toast--on"); clearTimeout(toastT); toastT = setTimeout(function(){ t.classList.remove("pf-toast--on"); }, 2300); }
+
+/* ---------------------------------- themes --------------------------------- */
+function themeId(){ let t = null; try { t = localStorage.getItem(LS_THEME); } catch(e){} return THEMES.some(function(x){ return x.id === t; }) ? t : THEMES[0].id; }
+function themeById(id){ return THEMES.filter(function(x){ return x.id === id; })[0] || THEMES[0]; }
+function applyTheme(id){
+  const th = themeById(id), de = document.documentElement;
+  if (de) de.setAttribute("data-theme", th.id);
+  const m = document.querySelector ? document.querySelector('meta[name="theme-color"]') : null;
+  if (m) m.setAttribute("content", th.meta);
+}
+/* crossfades the whole screen where the browser supports it; instant when Reduce Motion is on */
+function setTheme(id, after){
+  const th = themeById(id);
+  try { localStorage.setItem(LS_THEME, th.id); } catch(e){}
+  const run = function(){ applyTheme(th.id); if (after) after(); };
+  const calm = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (document.startViewTransition && !calm) document.startViewTransition(run); else run();
+}
+function openThemes(){
+  const grid = h("div",{class:"pf-themegrid", role:"radiogroup", "aria-label":"Theme"});
+  function paint(){
+    grid.innerHTML = "";
+    const now = themeId();
+    THEMES.forEach(function(t){
+      const on = t.id === now;
+      grid.appendChild(h("button",{type:"button", class:"pf-themecard"+(on?" pf-themecard--on":""), "data-theme":t.id,
+          role:"radio", "aria-checked":on?"true":"false", "aria-label":t.name,
+          onClick:function(){ if (t.id !== themeId()) setTheme(t.id, paint); }},
+        h("span",{class:"pf-tc-hero"}, h("span",{class:"pf-tc-ring"}), h("span",{class:"pf-tc-lines"}, h("i",{}), h("i",{}))),
+        h("span",{class:"pf-tc-body"}, h("i",{class:"pf-tc-dot pf-tc-dot--a"}), h("i",{class:"pf-tc-dot pf-tc-dot--p"}), h("i",{class:"pf-tc-dot pf-tc-dot--n"}), h("i",{class:"pf-tc-bar"})),
+        h("span",{class:"pf-tc-foot"}, h("span",{class:"pf-tc-name"}, t.name), on ? h("span",{class:"pf-tc-check"}, icon("check",12)) : null)
+      ));
+    });
+  }
+  paint();
+  openSheet("Theme", h("div",{},
+    h("p",{class:"pf-help"},"Tap one to try it \u2014 the app changes straight away. It's saved on this device only, so your iPhone and iPad can each have their own."),
+    grid,
+    actions(primaryBtn("Done", closeSheet))
+  ));
+}
+
+/* ------------------------------- carry-over editor ------------------------- */
+function monthLabel(id){ const p = String(id).split("-").map(Number); return new Date(p[0], p[1]-1, 1).toLocaleDateString("en-GB",{month:"short",year:"numeric"}); }
+function signed(n){ n = round2(n||0); return (n>0?"+":n<0?"\u2212":"") + money2(Math.abs(n)); }
+function openCarry(){
+  const C = cyc(), prevId = shiftCycleId(C.id, -1), prev = histFor(prevId);
+  const prevLbl = prev ? prev.label : monthLabel(prevId);
+  const auto = carryWorkedOut(C.id), edited = carryEdited(C.id);
+  const start = edited != null ? edited : auto;
+  let sign = start < 0 ? -1 : 1;
+  const mag = round2(Math.abs(start));
+  const amt = amtInput(mag ? (mag % 1 === 0 ? String(mag) : mag.toFixed(2)) : "");
+  const seg = h("div",{class:"pf-segctl", role:"radiogroup", "aria-label":"Left over or overspent"});
+  const box = h("div",{class:"pf-bd"});
+  function val(){ const v = round2(sign * Math.max(0, parseFloat(amt._input.value) || 0)); return v === 0 ? 0 : v; }
+  function paintSeg(){
+    seg.innerHTML = "";
+    [[1,"Left over","pf-segctl--pos"],[-1,"Overspent","pf-segctl--neg"]].forEach(function(o){
+      seg.appendChild(h("button",{type:"button", class:o[2], role:"radio", "aria-checked":sign===o[0]?"true":"false",
+        onClick:function(){ sign = o[0]; paintSeg(); paintBox(); }}, o[1]));
+    });
+  }
+  function paintBox(){
+    const base = (state.salary||0) + bankTotal();
+    box.innerHTML = "";
+    box.appendChild(h("div",{class:"pf-bdrow"}, h("span",{}, prev ? "Worked out from "+prevLbl : "Nothing recorded for "+prevLbl),
+      h("span",{}, prev ? signed(auto) : "\u2014")));
+    box.appendChild(h("div",{class:"pf-bdrow"}, h("span",{},"Salary and bank shifts"), h("span",{}, money2(base))));
+    box.appendChild(h("div",{class:"pf-bdrow pf-bdrow--tot"}, h("span",{},"This cycle's income"), h("strong",{class:"pf-pos"}, money2(base + val()))));
+  }
+  amt._input.addEventListener("input", paintBox);
+  paintSeg(); paintBox();
+  const act = h("div",{class:"pf-actions"});
+  if (edited != null) act.appendChild(h("button",{class:"pf-btn pf-btn--ghost", onClick:function(){ setCarryEdit(C.id, null); closeSheet(); toast("Back to "+signed(auto)); }}, "Use "+signed(auto)));
+  act.appendChild(primaryBtn("Save", function(){ const v = val(); setCarryEdit(C.id, v); closeSheet(); toast("Carried over set to "+signed(v)); }));
+  openSheet("Carried over", h("div",{},
+    h("p",{class:"pf-help"}, "What came across from "+prevLbl+" into this cycle. Change it if the real figure was different \u2014 for example, if you moved some into a savings account."),
+    seg,
+    field("Amount", amt),
+    box,
+    act
+  ));
+}
 
 /* -------------------------------- settings --------------------------------- */
 function openSettings(){
@@ -976,7 +1134,7 @@ function openSettings(){
     dedFields);
 
   const carryRow = h("div",{class:"pf-toggrow"},
-    h("div",{}, h("span",{class:"pf-toglab"},"Carry over what's left"), h("span",{class:"pf-hint"},"Adds last cycle's leftover to this cycle's income.")),
+    h("div",{}, h("span",{class:"pf-toglab"},"Carry over what's left"), h("span",{class:"pf-hint"},"Adds last cycle's leftover to this cycle's income. Tap Carried over on the Income card to change the amount.")),
     toggle);
 
   /* sync box */
@@ -1182,6 +1340,7 @@ function syncNow(){
 
 /* ---------------------------------- boot ----------------------------------- */
 function boot(){
+  applyTheme(themeId());
   state = loadLocal();
   archiveIfRolled();
   renderApp();

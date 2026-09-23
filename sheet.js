@@ -7,6 +7,16 @@ const LS_CLIENT = "nhs-budget:gclient";
 const LS_DRIVE_ON = "nhs-budget:driveon";
 const DRIVE_FILE = "budget.json";
 const SCOPE = "https://www.googleapis.com/auth/drive.appdata";
+/* the theme is saved per device (shared with the app view on the same device); it never syncs */
+const LS_THEME = "nhs-budget:theme";
+const THEMES = [
+  { id:"violet", name:"Violet", meta:"#5B21B6" },
+  { id:"sunset", name:"Sunset", meta:"#B0124A" },
+  { id:"lagoon", name:"Lagoon", meta:"#13307A" },
+  { id:"emerald", name:"Emerald", meta:"#053D2F" },
+  { id:"berry", name:"Berry", meta:"#5B0F55" },
+  { id:"night", name:"Night shift", meta:"#0D0B1E" }
+];
 
 const CAT = {
   rent:      { label: "Rent / Mortgage", color: "#7C3AED" },
@@ -82,7 +92,7 @@ function kid(e, k){
 }
 
 /* -------------------------------- state --------------------------------- */
-function blank(){ return { salary:0, currency:"\u00A3", payDay:25, expenses:[], shifts:[], paid:{}, goals:[], history:[], lastCycleId:null, carryOver:true, updatedAt:0 }; }
+function blank(){ return { salary:0, currency:"\u00A3", payDay:25, expenses:[], shifts:[], paid:{}, goals:[], history:[], lastCycleId:null, carryOver:true, carryEdits:{}, updatedAt:0 }; }
 const EMOJI_MAP = { "\uD83D\uDEDF":"lifebuoy", "\u2708\uFE0F":"plane", "\uD83C\uDFE0":"home", "\uD83D\uDE97":"car",
   "\uD83C\uDF81":"gift", "\uD83D\uDC8D":"diamond", "\uD83C\uDF93":"cap", "\uD83D\uDCBB":"laptop",
   "\u2764\uFE0F":"heart", "\uD83D\uDC37":"coins", "\uD83D\uDCF1":"phone", "\uD83D\uDECB\uFE0F":"sofa" };
@@ -93,6 +103,13 @@ function normalize(o){
   if (!s.currency) s.currency = "\u00A3";
   if (!s.payDay) s.payDay = 25;
   if (typeof s.carryOver !== "boolean") s.carryOver = true;
+  /* hand-edited carry-over amounts, keyed by the cycle they carry INTO ("YYYY-MM") - same rules as the app */
+  const ce = {};
+  if (s.carryEdits && typeof s.carryEdits === "object" && !Array.isArray(s.carryEdits)){
+    Object.keys(s.carryEdits).forEach(function(k){ const v = Number(s.carryEdits[k]);
+      if (/^\d{4}-\d{2}$/.test(k) && s.carryEdits[k] !== null && s.carryEdits[k] !== "" && Number.isFinite(v)) ce[k] = round2(v); });
+  }
+  s.carryEdits = ce;
   const dd = s.deductions || {};
   let nm = dd.niMode; if (!nm) nm = (dd.ni === 2) ? "upper" : (dd.ni === 0) ? "off" : "main";
   s.deductions = { on: typeof dd.on === "boolean" ? dd.on : true, tax: dd.tax != null ? dd.tax : 20,
@@ -120,7 +137,12 @@ function cyc(){ return getCycle(state.payDay||25, NOW); }
 function inCycle(s){ const C = cyc(); const t = new Date(s.date+"T00:00:00").getTime(); return t >= C.start.getTime() && t < C.end.getTime(); }
 function bankTotal(){ return state.shifts.filter(inCycle).reduce(function(a,s){ return a+(s.amount||0); },0); }
 function histFor(id){ return state.history.filter(function(x){ return x.cycleId === id; })[0] || null; }
-function carriedOver(){ if (!state.carryOver) return 0; const p = histFor(shiftCycleId(cyc().id,-1)); return p ? (p.saved||0) : 0; }
+/* carry-over: your edit for a cycle if you made one, otherwise what the previous cycle finished with */
+function carryWorkedOut(id){ const p = histFor(shiftCycleId(id,-1)); return p ? (p.saved||0) : 0; }
+function carryEdited(id){ const ce = state.carryEdits; const v = (ce && Object.prototype.hasOwnProperty.call(ce, id)) ? ce[id] : null;
+  return (typeof v === "number" && Number.isFinite(v)) ? v : null; }
+function carryFor(id){ if (!state.carryOver) return 0; const e = carryEdited(id); return e != null ? e : carryWorkedOut(id); }
+function carriedOver(){ return carryFor(cyc().id); }
 function income(){ return (state.salary||0) + bankTotal() + carriedOver(); }
 const NI_THRESH = {
   weekly:      { pt:242,  uel:967,  label:"week" },
@@ -192,6 +214,26 @@ function remaining(){ return income() - expTotal(); }
 function pk(id){ return cyc().id + "__" + id; }
 
 function commit(){ state.updatedAt = Date.now(); persistLocal(); pushSoon(); }
+
+/* -------------------------------- themes -------------------------------- */
+function themeId(){ let t = null; try { t = localStorage.getItem(LS_THEME); } catch(e){} return THEMES.some(function(x){ return x.id === t; }) ? t : THEMES[0].id; }
+function applyTheme(id){
+  const th = THEMES.filter(function(x){ return x.id === id; })[0] || THEMES[0];
+  if (document.documentElement) document.documentElement.setAttribute("data-theme", th.id);
+  const m = document.querySelector ? document.querySelector('meta[name="theme-color"]') : null;
+  if (m) m.setAttribute("content", th.meta);
+}
+const PALETTE_SVG = '<svg viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3C7 3 3 6.8 3 11.6 3 16.4 6.9 20 11.4 20c1.2 0 2-.8 2-1.8 0-.5-.2-.9-.5-1.2-.3-.4-.5-.8-.5-1.2 0-1 .8-1.8 1.8-1.8h2.3c3 0 5.5-2.3 5.5-5.3C22 5.2 17.6 3 12 3Z"/><circle cx="7.4" cy="11.6" r="1.65" fill="#FF4D7E" stroke="none"/><circle cx="9.9" cy="7.4" r="1.65" fill="#FF9F1C" stroke="none"/><circle cx="14.6" cy="6.9" r="1.65" fill="#2EE59D" stroke="none"/><circle cx="18" cy="10" r="1.65" fill="#7C5CFF" stroke="none"/></svg>';
+function renderThemePicker(){
+  const host = document.getElementById("sh-theme"); if (!host) return;
+  host.innerHTML = "";
+  const ic = el("span",{class:"sh-themeicon", "aria-hidden":"true"}); ic.innerHTML = PALETTE_SVG;
+  const sel = el("select",{class:"sh-themesel", "aria-label":"Theme"});
+  const now = themeId();
+  THEMES.forEach(function(t){ const o = el("option",{value:t.id}, t.name); if (t.id === now) o.selected = true; sel.appendChild(o); });
+  sel.addEventListener("change", function(){ try { localStorage.setItem(LS_THEME, sel.value); } catch(e){} applyTheme(sel.value); });
+  host.appendChild(ic); host.appendChild(sel);
+}
 
 /* -------------------------------- toast --------------------------------- */
 let toastT = null;
@@ -332,7 +374,7 @@ function cellInput(col, row, rowIdx, onChange){
     return s;
   }
   if (col.type === "calc"){
-    return el("div",{class:"sh-in sh-in--num", style:{color:"#8C86A0"}}, col.get(row));
+    return el("div",{class:"sh-in sh-in--num", style:{color:"var(--ink-3)"}}, col.get(row));
   }
   const inp = el("input",{
     class: "sh-in" + (col.type === "num" ? " sh-in--num" : col.type === "date" || col.type === "month" ? " sh-in--date" : ""),
@@ -514,9 +556,9 @@ function expensesPanel(){
       { key:"left", label:"Left", type:"calc", align:"r", width:"140px",
         get:function(r){ const n=paymentsLeft(r); return n==null ? "\u2014" : (n===0 ? "finished" : n+" \u00B7 "+money0(n*(r.amount||0))); },
         render: function(r){ const n=paymentsLeft(r);
-          if (n==null) return el("div",{class:"sh-in sh-in--num", style:{color:"#C6BEDA"}},"\u2014");
+          if (n==null) return el("div",{class:"sh-in sh-in--num", style:{color:"var(--ink-4)"}},"\u2014");
           if (n===0) return el("div",{style:{padding:"11px 12px",textAlign:"right"}}, el("span",{class:"sh-pill sh-pill--manual"},"finished"));
-          return el("div",{class:"sh-in sh-in--num", style:{color:n<=1?"#C2410C":"#6D28D9",fontWeight:"700"}}, n+" \u00D7 \u00B7 "+money0(n*(r.amount||0))); } },
+          return el("div",{class:"sh-in sh-in--num", style:{color:n<=1?"var(--hot)":"var(--accent-ink)",fontWeight:"700"}}, n+" \u00D7 \u00B7 "+money0(n*(r.amount||0))); } },
       { key:"paid", label:"Paid", type:"check", align:"r", width:"70px",
         get:function(r){ return !!state.paid[pk(r.id)]; },
         set:function(r,v){ const k = pk(r.id); if (v) state.paid[k] = true; else delete state.paid[k]; } }
@@ -583,7 +625,7 @@ function shiftsPanel(){
         render:function(r){ return el("div",{class:"sh-in sh-in--num sh-pos"}, money2(r.amount||0)); } },
       { key:"cyc", label:"Cycle", type:"calc", width:"110px",
         get:function(r){ return inCycle(r) ? "this cycle" : ""; },
-        render: function(r){ return el("div",{style:{padding:"11px 12px"}}, inCycle(r) ? el("span",{class:"sh-pill sh-pill--now"},"this cycle") : el("span",{style:{color:"#B0A9C4",fontSize:"12.5px"}},"\u2014")); } }
+        render: function(r){ return el("div",{style:{padding:"11px 12px"}}, inCycle(r) ? el("span",{class:"sh-pill sh-pill--now"},"this cycle") : el("span",{style:{color:"var(--ink-4)",fontSize:"12.5px"}},"\u2014")); } }
     ],
     onDelete: function(r){ state.shifts = state.shifts.filter(function(x){ return x.id !== r.id; }); },
     addRow: function(silent){ state.shifts.push({ id:uid(), date:new Date().toISOString().slice(0,10), label:"", hours:null, rate:null, gross:0, amount:0 }); if (!silent){ commit(); renderAll(); } },
@@ -732,6 +774,21 @@ function setupPanel(){
   const carry = el("select",{}, el("option",{value:"on"},"On \u2014 roll leftovers forward"), el("option",{value:"off"},"Off \u2014 each cycle starts clean"));
   carry.value = state.carryOver ? "on" : "off";
   carry.addEventListener("change", function(){ state.carryOver = carry.value === "on"; commit(); renderAll(); });
+  /* carried in this cycle: blank = use last cycle's leftover; a number = your figure (minus for overspent) */
+  const cyId = cyc().id, carryAuto = carryWorkedOut(cyId), carryEd = carryEdited(cyId);
+  const carryAmt = el("input",{ type:"text", inputmode:"decimal", "aria-label":"Carried in this cycle",
+    value: carryEd != null ? String(carryEd) : "", placeholder: (Math.round(carryAuto*100)/100).toFixed(2) });
+  if (!state.carryOver) carryAmt.disabled = true;
+  carryAmt.addEventListener("change", function(){
+    const raw = carryAmt.value.replace(/\u2212/g, "-").trim();
+    if (!state.carryEdits || typeof state.carryEdits !== "object") state.carryEdits = {};
+    if (raw === "") delete state.carryEdits[cyId];
+    else { const v = round2(num(raw)); if (v === round2(carryAuto)) delete state.carryEdits[cyId]; else state.carryEdits[cyId] = v; }
+    commit(); renderAll();
+  });
+  const carryHint = !state.carryOver ? "Carry over is off, so nothing comes across."
+    : carryEd != null ? "You changed this. Worked out from last cycle: " + money2(carryAuto) + " \u2014 clear the box to use that."
+    : "Worked out from last cycle. Type an amount to change it \u2014 use a minus sign if you overspent.";
 
   function sel(opts, cur, onch){
     const s2 = el("select",{});
@@ -772,6 +829,7 @@ function setupPanel(){
       fld("Payday", payday, "Everything resets on this day of the month."),
       fld("Currency symbol", cur),
       fld("Carry over leftovers", carry, "Adds last cycle's remainder to this cycle's income."),
+      fld("Carried in this cycle", carryAmt, carryHint),
       fld("Bank shift take-home", onOff, "Turns gross shift pay into what reaches your bank."),
       fld("Income tax on extra earnings", sel(TAX_OPTS, state.deductions.tax, function(v){ state.deductions.tax=v; recalcShifts(); commit(); renderAll(); }), "Your marginal rate."),
       fld("National Insurance", selS(NIMODE_OPTS, state.deductions.niMode, function(v){ state.deductions.niMode=v; recalcShifts(); commit(); renderAll(); })),
@@ -856,8 +914,12 @@ function renderAll(){ renderCycleLabel(); renderSyncBar(); renderTabs(); renderP
 
 /* --------------------------------- boot ---------------------------------- */
 function boot(){
+  applyTheme(themeId());
   state = loadLocal();
   renderAll();
+  renderThemePicker();
+  /* the app view changed the theme in another tab on this device */
+  window.addEventListener("storage", function(e){ if (e.key === LS_THEME){ applyTheme(themeId()); renderThemePicker(); } });
   const rl = document.getElementById("sh-reload");
   if (rl) rl.addEventListener("click", function(){ reloadFromDrive(); });
   if (localStorage.getItem(LS_DRIVE_ON) === "1" && driveClientId()){
