@@ -471,6 +471,59 @@ select.pf-input { -webkit-appearance: none; appearance: none; cursor: pointer;
 .pf-segctl .pf-segctl--pos[aria-checked="true"] { color: var(--pos); }
 .pf-segctl .pf-segctl--neg[aria-checked="true"] { color: var(--neg); }
 
+/* cash flow card */
+.pf-cash { cursor: pointer; }
+.pf-cashmore { display: inline-flex; align-items: center; gap: 2px; font-size: 12.5px; font-weight: 700; color: var(--accent); }
+.pf-cashtop { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 4px; }
+.pf-cashstat { display: flex; flex-direction: column; gap: 1px; padding: 10px 12px; border-radius: 14px; background: var(--fill-1); }
+.pf-cashlab { font-size: 12px; font-weight: 650; color: var(--ink-3); }
+.pf-cashval { font-size: 22px; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--ink); }
+.pf-cashsub { font-size: 11.5px; color: var(--ink-4); font-weight: 600; }
+.pf-cashval.pf-pos { color: var(--pos); }
+.pf-cashval.pf-neg { color: var(--neg); }
+.pf-cfchart { display: block; width: 100%; height: auto; margin: 6px 0 2px; overflow: visible; }
+.pf-cashmeta { font-size: 12.5px; color: var(--ink-3); margin: 4px 2px 12px; line-height: 1.45; }
+.pf-cashbtns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pf-cashbtn { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 11px 10px; border-radius: 12px; border: 1.5px solid var(--accent-line);
+  background: var(--card); color: var(--accent); font-family: inherit; font-size: 13.5px; font-weight: 720; cursor: pointer; transition: transform .12s ease, background .15s ease; }
+.pf-cashbtn:active { transform: scale(.97); }
+.pf-cashbtn--go { background: linear-gradient(135deg, var(--hero-2), var(--hero-3)); color: #fff; border-color: transparent; box-shadow: 0 8px 16px -10px rgba(var(--hero-shadow),.8); }
+.pf-xtra { display: flex; align-items: center; gap: 8px; margin: 2px 2px 8px; padding: 9px 12px; border-radius: 12px; background: var(--hot-soft); color: var(--hot);
+  font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.pf-xtra strong { font-weight: 800; }
+
+/* cash flow timeline */
+.pf-cfsum { margin: 0 0 12px; }
+.pf-cfchartwrap { padding: 6px 10px 2px; border-radius: 16px; background: var(--fill-1); margin-bottom: 12px; }
+.pf-cflist { display: flex; flex-direction: column; margin-top: 6px; }
+.pf-cfday { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 14px 6px 6px; border-bottom: 1px solid var(--line); }
+.pf-cfdate { font-size: 13px; font-weight: 750; color: var(--title); display: inline-flex; align-items: center; gap: 7px; }
+.pf-cfbal { font-size: 13px; font-weight: 750; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.pf-cftoday { font-size: 10.5px; font-weight: 800; color: #fff; background: var(--hero-2); padding: 2px 7px; border-radius: 999px; }
+.pf-cfday--today { border-bottom-color: var(--accent-line); }
+.pf-cfday--past .pf-cfdate, .pf-cfday--past .pf-cfbal { color: var(--ink-4); }
+.pf-cfday--payday { margin-top: 12px; border-top: 1.5px dashed var(--accent-line); padding-top: 16px; }
+.pf-cfrow { padding: 9px 6px; }
+.pf-cfrow .pf-expname, .pf-cfrow .pf-expcat { white-space: normal; }
+.pf-cfrow--skip { opacity: .55; }
+.pf-cfrow--undated .pf-expcat { color: var(--hot); font-weight: 650; }
+.pf-cfrow--anchor .pf-expname { color: var(--accent-ink); }
+.pf-cfnote { font-size: 12px; color: var(--ink-3); padding: 4px 6px 8px 60px; line-height: 1.45; }
+
+.pf-cashnext { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 11px 12px; border-radius: 12px; background: var(--fill-1);
+  font-size: 13px; font-weight: 700; color: var(--ink-2); cursor: pointer; }
+.pf-cashnextval { margin-left: auto; font-weight: 600; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.pf-cashnextval strong { color: var(--title); font-weight: 800; }
+.pf-cashnext > span:last-child { color: var(--accent); display: inline-flex; }
+.pf-cfseg { margin: 2px 0 6px; }
+.pf-cfrange { text-align: center; font-size: 12.5px; font-weight: 650; color: var(--ink-3); margin: 0 0 10px; }
+.pf-ic--plan { outline: 1.5px dashed var(--accent-line); outline-offset: 2px; }
+.pf-plantag { display: inline-block; margin-right: 6px; padding: 1px 7px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-ink);
+  font-size: 10.5px; font-weight: 800; letter-spacing: .02em; }
+.pf-cfrow--plan .pf-expamt { color: var(--ink-3); }
+.pf-row2--one { grid-template-columns: 1fr !important; }
+.pf-row2--one > * { flex: 1 1 100%; }
+
 @keyframes pf-fadeup { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
 @keyframes pf-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes pf-up { from { transform: translateY(100%); } to { transform: translateY(0); } }

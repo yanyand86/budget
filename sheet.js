@@ -92,13 +92,13 @@ function kid(e, k){
 }
 
 /* -------------------------------- state --------------------------------- */
-function blank(){ return { salary:0, currency:"\u00A3", payDay:25, expenses:[], shifts:[], paid:{}, goals:[], history:[], lastCycleId:null, carryOver:true, carryEdits:{}, updatedAt:0 }; }
+function blank(){ return { salary:0, currency:"\u00A3", payDay:25, expenses:[], shifts:[], paid:{}, goals:[], history:[], lastCycleId:null, carryOver:true, carryEdits:{}, spends:[], balances:[], shiftPay:"next", updatedAt:0 }; }
 const EMOJI_MAP = { "\uD83D\uDEDF":"lifebuoy", "\u2708\uFE0F":"plane", "\uD83C\uDFE0":"home", "\uD83D\uDE97":"car",
   "\uD83C\uDF81":"gift", "\uD83D\uDC8D":"diamond", "\uD83C\uDF93":"cap", "\uD83D\uDCBB":"laptop",
   "\u2764\uFE0F":"heart", "\uD83D\uDC37":"coins", "\uD83D\uDCF1":"phone", "\uD83D\uDECB\uFE0F":"sofa" };
 function normalize(o){
   const s = Object.assign(blank(), o || {});
-  ["expenses","shifts","goals","history"].forEach(function(k){ if (!Array.isArray(s[k])) s[k] = []; });
+  ["expenses","shifts","goals","history","spends","balances"].forEach(function(k){ if (!Array.isArray(s[k])) s[k] = []; });
   if (!s.paid || typeof s.paid !== "object") s.paid = {};
   if (!s.currency) s.currency = "\u00A3";
   if (!s.payDay) s.payDay = 25;
@@ -110,13 +110,29 @@ function normalize(o){
       if (/^\d{4}-\d{2}$/.test(k) && s.carryEdits[k] !== null && s.carryEdits[k] !== "" && Number.isFinite(v)) ce[k] = round2(v); });
   }
   s.carryEdits = ce;
+  /* cash flow fields - same rules as the app */
+  if (s.shiftPay !== "month") s.shiftPay = "next";
+  s.expenses = s.expenses.map(function(e){
+    const d = parseInt(e.due, 10); e.due = (d >= 1 && d <= 31) ? d : null;
+    if (typeof e.spread !== "boolean") e.spread = SPREAD_CATS.indexOf(e.category) >= 0;
+    if (e.spread) e.due = null;
+    return e;
+  });
+  const isDay = function(v){ return typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v); };
+  s.spends = s.spends.filter(function(x){ return x && isDay(x.date) && Number.isFinite(Number(x.amount)) && Number(x.amount) >= 0; })
+    .map(function(x){ return { id: x.id || uid(), date: x.date, amount: round2(Number(x.amount)), note: typeof x.note === "string" ? x.note : "",
+      cat: CAT[x.cat] ? x.cat : "other", at: Number.isFinite(Number(x.at)) ? Number(x.at) : 0 }; });
+  s.balances = s.balances.filter(function(b){ return b && isDay(b.date) && b.amount !== null && b.amount !== "" && Number.isFinite(Number(b.amount)); })
+    .map(function(b){ return { id: b.id || uid(), date: b.date, amount: round2(Number(b.amount)), at: Number.isFinite(Number(b.at)) ? Number(b.at) : 0 }; })
+    .sort(function(a, b){ return a.at - b.at; }).slice(-60);
   const dd = s.deductions || {};
   let nm = dd.niMode; if (!nm) nm = (dd.ni === 2) ? "upper" : (dd.ni === 0) ? "off" : "main";
   s.deductions = { on: typeof dd.on === "boolean" ? dd.on : true, tax: dd.tax != null ? dd.tax : 20,
     niMode: nm, niFreq: dd.niFreq || "weekly",
     pensionOn: typeof dd.pensionOn === "boolean" ? dd.pensionOn : !!(dd.pension > 0),
     pension: (dd.pension != null && dd.pension > 0) ? dd.pension : 9.8 };
-  s.shifts = s.shifts.map(function(x){ if (x.gross == null) x.gross = x.amount || 0; return x; });
+  s.shifts = s.shifts.map(function(x){ if (x.gross == null) x.gross = x.amount || 0;
+    if (!(typeof x.paidOn === "string" && /^\d{4}-\d{2}-\d{2}$/.test(x.paidOn))) x.paidOn = null; return x; });
   s.goals = s.goals.map(function(g){
     if (!g.glyph) g.glyph = (g.emoji && EMOJI_MAP[g.emoji]) ? EMOJI_MAP[g.emoji] : "target";
     if (GOAL_COLORS.indexOf(g.color) < 0) g.color = GOAL_COLORS[0];
@@ -124,7 +140,7 @@ function normalize(o){
   });
   return s;
 }
-function loadLocal(){ try { const raw = localStorage.getItem(LS_KEY); if (raw) return normalize(JSON.parse(raw)); } catch(e){} return blank(); }
+function loadLocal(){ try { const raw = localStorage.getItem(LS_KEY); if (raw) return normalize(JSON.parse(raw)); } catch(e){} return normalize({}); }  /* nothing saved yet: still fill in every default */
 function persistLocal(){ try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch(e){} }
 
 let state = blank();
@@ -210,7 +226,24 @@ function expActiveIn(e, cycleId){ return !e.endsOn || e.endsOn >= (cycleId || cy
 function activeExpenses(cycleId){ return state.expenses.filter(function(e){ return expActiveIn(e, cycleId); }); }
 function paymentsLeft(e){ if (!e.endsOn) return null; return Math.max(0, monthsBetween(cyc().id, e.endsOn)+1); }
 function expTotal(){ return activeExpenses().reduce(function(a,e){ return a+(e.amount||0); },0); }
-function remaining(){ return income() - expTotal(); }
+/* ---- cash flow helpers (mirrors the app) ---- */
+const SPREAD_CATS = ["groceries","transport","fuel","dining"];
+function isoDate(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+function parseISO(v){ const p = String(v).split("-").map(Number); return new Date(p[0], p[1]-1, p[2]); }
+function addDays(d, n){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()+n); }
+function paydayIn(y, m){ return new Date(y, m, state.payDay || 25); }
+function nextPaydayAfter(v){ const d = parseISO(v); let p = paydayIn(d.getFullYear(), d.getMonth()); if (p <= d) p = paydayIn(d.getFullYear(), d.getMonth()+1); return p; }
+function autoPayDate(sh){ const d = parseISO(sh.date); return isoDate(state.shiftPay === "month" ? paydayIn(d.getFullYear(), d.getMonth()+1) : nextPaydayAfter(sh.date)); }
+function catBudgets(cid){ const b = {}; activeExpenses(cid).forEach(function(e){ if (e.spread) b[e.category] = round2((b[e.category]||0) + (e.amount||0)); }); return b; }
+function spendsIn(C){ const a = isoDate(C.start), z = isoDate(addDays(C.end, -1)); return state.spends.filter(function(x){ return x.date >= a && x.date <= z && x.amount > 0; }); }
+function extraSpend(){
+  const C = cyc(), b = catBudgets(C.id), by = {}, today = isoDate(NOW);
+  /* spends dated after today are plans - they count once their day comes */
+  spendsIn(C).forEach(function(x){ if (x.date > today) return; by[x.cat] = (by[x.cat]||0) + x.amount; });
+  return round2(Object.keys(by).reduce(function(t, k){ return t + (b[k] ? Math.max(0, by[k] - b[k]) : by[k]); }, 0));
+}
+function remaining(){ return income() - expTotal() - extraSpend(); }
+function whenOf(r){ if (r.date > isoDate(NOW)) return "planned"; return inCycle(r) ? "this cycle" : ""; }
 function pk(id){ return cyc().id + "__" + id; }
 
 function commit(){ state.updatedAt = Date.now(); persistLocal(); pushSoon(); }
@@ -518,12 +551,16 @@ function pickFile(accept, cb){
 const TABS = [
   { id:"expenses", label:"Expenses",    count:function(){ return state.expenses.length; } },
   { id:"shifts",   label:"Bank shifts", count:function(){ return state.shifts.length; } },
+  { id:"spending", label:"Spending",    count:function(){ return state.spends.length; } },
   { id:"goals",    label:"Savings goals", count:function(){ return state.goals.length; } },
   { id:"history",  label:"History",     count:function(){ return state.history.length; } },
   { id:"setup",    label:"Setup",       count:null }
 ];
 
 const catOpts = CAT_ORDER.map(function(k){ return { value:k, label:CAT[k].label }; });
+const ORD = function(n){ const x=["th","st","nd","rd"], v=n%100; return n+(x[(v-20)%10]||x[v]||x[0]); };
+const GOES_OPTS = [{ value:"", label:"No day set" }, { value:"spread", label:"Bit by bit" }]
+  .concat(Array.from({length:31}, function(_, i){ return { value:String(i+1), label:"The "+ORD(i+1) }; }));
 const glyphOpts = GOAL_GLYPHS.map(function(g){ return { value:g, label:GLYPH_LABEL[g]||g }; });
 const colorOpts = GOAL_COLORS.map(function(c){ return { value:c, label:COLOR_LABEL[c]||c }; });
 
@@ -551,6 +588,9 @@ function expensesPanel(){
       { key:"amount", label:"Amount / month", type:"num", align:"r", width:"150px",
         get:function(r){ return r.amount != null ? String(r.amount) : ""; },
         set:function(r,v){ r.amount = Math.max(0, round2(num(v))); } },
+      { key:"goes", label:"Goes out", type:"select", width:"150px", opts: GOES_OPTS,
+        get:function(r){ return r.spread ? "spread" : (r.due ? String(r.due) : ""); },
+        set:function(r,v){ if (v === "spread"){ r.spread = true; r.due = null; } else { r.spread = false; const d = parseInt(v,10); r.due = (d >= 1 && d <= 31) ? d : null; } } },
       { key:"endsOn", label:"Ends", type:"month", width:"150px",
         get:function(r){ return r.endsOn||""; }, set:function(r,v){ r.endsOn = v || null; } },
       { key:"left", label:"Left", type:"calc", align:"r", width:"140px",
@@ -573,6 +613,7 @@ function expensesPanel(){
       const finN = state.expenses.length - live.length;
       return [ { text: finN ? ("Total \u00B7 " + finN + " finished") : "Total", hint:true }, { text:"" },
         { node: el("strong",{}, money2(expTotal())), align:"r" },
+        { text:"" },
         { text:"" },
         { text:"" },
         { text: paidN + "/" + live.length, align:"r", hint:true } ];
@@ -623,6 +664,9 @@ function shiftsPanel(){
       { key:"net", label:"Take-home", type:"calc", align:"r", width:"130px",
         get:function(r){ return money2(r.amount||0); },
         render:function(r){ return el("div",{class:"sh-in sh-in--num sh-pos"}, money2(r.amount||0)); } },
+      { key:"paidOn", label:"Paid on", type:"date", width:"160px",
+        get:function(r){ return r.paidOn || (r.date ? autoPayDate(r) : ""); },
+        set:function(r,v){ r.paidOn = (/^\d{4}-\d{2}-\d{2}$/.test(v) && (!r.date || v !== autoPayDate(r))) ? v : null; } },
       { key:"cyc", label:"Cycle", type:"calc", width:"110px",
         get:function(r){ return inCycle(r) ? "this cycle" : ""; },
         render: function(r){ return el("div",{style:{padding:"11px 12px"}}, inCycle(r) ? el("span",{class:"sh-pill sh-pill--now"},"this cycle") : el("span",{style:{color:"var(--ink-4)",fontSize:"12.5px"}},"\u2014")); } }
@@ -636,6 +680,7 @@ function shiftsPanel(){
       return [ { text:"Totals", hint:true }, { text:"" }, { text:"" }, { text:"" },
         { node: el("strong",{}, money2(allGross)), align:"r" },
         { node: el("strong",{class:"sh-pos"}, money2(allNet)), align:"r" },
+        { text:"" },
         { node: el("span",{class:"sh-pos"}, "cycle " + money2(bankTotal())), align:"r" } ];
     }
   };
@@ -643,8 +688,47 @@ function shiftsPanel(){
     downloadText("bank-shifts.csv", toCSV(["Date","Shift","Hours","Rate","Gross","Take-home"],
       state.shifts.map(function(s){ return [s.date, s.label, s.hours, s.rate, (s.gross!=null?s.gross:s.amount), s.amount]; })));
   }) ];
-  return panelCard("Bank shifts", "Enter gross pay (or hours \u00D7 rate) \u2014 take-home is worked out from your deduction settings. Only shifts in the current cycle count towards this month.",
+  return panelCard("Bank shifts", "Enter gross pay (or hours \u00D7 rate) \u2014 take-home is worked out from your deduction settings. Paid on fills in from your bank pay rule (Setup); change it for any shift.",
     acts, buildGrid(spec), "Add shift", function(){ spec.addRow(); });
+}
+
+/* -------------------------------- spending ------------------------------- */
+function spendingPanel(){
+  const C = cyc();
+  const spec = {
+    data: function(){ return state.spends.slice().sort(function(x, y){ return x.date < y.date ? 1 : x.date > y.date ? -1 : (y.at||0) - (x.at||0); }); },
+    cols: [
+      { key:"date", label:"Date", type:"date", width:"160px",
+        get:function(r){ return r.date||""; }, set:function(r,v){ if (/^\d{4}-\d{2}-\d{2}$/.test(v)) r.date = v; } },
+      { key:"note", label:"What", type:"text", placeholder:"e.g. Tesco",
+        get:function(r){ return r.note||""; }, set:function(r,v){ r.note = v; } },
+      { key:"cat", label:"Category", type:"select", opts:catOpts, width:"210px",
+        swatch:function(r){ return catOf(r.cat).color; },
+        get:function(r){ return r.cat||"other"; }, set:function(r,v){ r.cat = CAT[v] ? v : "other"; } },
+      { key:"amount", label:"Amount", type:"num", align:"r", width:"140px",
+        get:function(r){ return r.amount != null ? String(r.amount) : ""; }, set:function(r,v){ r.amount = Math.max(0, round2(num(v))); } },
+      { key:"cyc", label:"When", type:"calc", width:"120px",
+        get:function(r){ return whenOf(r); },
+        render: function(r){ const w = whenOf(r); return el("div",{style:{padding:"11px 12px"}}, w ? el("span",{class:"sh-pill " + (w === "planned" ? "sh-pill--manual" : "sh-pill--now")}, w) : el("span",{style:{color:"var(--ink-4)",fontSize:"12.5px"}},"\u2014")); } }
+    ],
+    onDelete: function(r){ state.spends = state.spends.filter(function(x){ return x.id !== r.id; }); },
+    addRow: function(silent){ state.spends.push({ id:uid(), date:isoDate(NOW), amount:0, note:"", cat:"groceries", at:Date.now() }); if (!silent){ commit(); renderAll(); } },
+    empty: "No spending logged yet \u2014 add it here, or tap Log spend in the app.",
+    foot: function(){
+      const today = isoDate(NOW), xtra = extraSpend();
+      const tot = round2(spendsIn(C).reduce(function(a, x){ return a + (x.date <= today ? x.amount : 0); }, 0));
+      const plan = round2(state.spends.reduce(function(a, x){ return a + (x.date > today ? x.amount : 0); }, 0));
+      return [ { text:"Spent this cycle", hint:true }, { text:"" },
+        { text: xtra > 0 ? money2(xtra) + " outside your budget" : "", hint:true },
+        { node: el("strong",{}, money2(tot)), align:"r" }, { text: plan > 0 ? money2(plan) + " planned" : "", hint:true } ];
+    }
+  };
+  const acts = [ csvBtn("Export CSV", function(){
+    downloadText("spending.csv", toCSV(["Date","What","Category","Amount"],
+      state.spends.map(function(x){ return [x.date, x.note, catOf(x.cat).label, x.amount]; })));
+  }) ];
+  return panelCard("Spending", "Day-to-day spends. Anything in a bit-by-bit category (like groceries) comes out of that budget; everything else comes off what's left this cycle. Give a spend a future date to plan it \u2014 it counts once the day comes.",
+    acts, buildGrid(spec), "Add spend", function(){ spec.addRow(); });
 }
 
 /* --------------------------------- goals --------------------------------- */
@@ -789,6 +873,17 @@ function setupPanel(){
   const carryHint = !state.carryOver ? "Carry over is off, so nothing comes across."
     : carryEd != null ? "You changed this. Worked out from last cycle: " + money2(carryAuto) + " \u2014 clear the box to use that."
     : "Worked out from last cycle. Type an amount to change it \u2014 use a minus sign if you overspent.";
+  const payRule = el("select",{ "aria-label":"Bank shift pay arrives" }, el("option",{value:"next"},"On the next payday after the shift"), el("option",{value:"month"},"On payday in the month after the shift"));
+  payRule.value = state.shiftPay;
+  payRule.addEventListener("change", function(){ state.shiftPay = payRule.value === "month" ? "month" : "next"; commit(); renderAll(); });
+  const lastBal = state.balances.slice().sort(function(a, b){ return a.at - b.at; }).pop() || null;
+  const balIn = el("input",{ type:"text", inputmode:"decimal", "aria-label":"Bank balance today", value:"", placeholder: lastBal ? String(lastBal.amount) : "e.g. 1250" });
+  balIn.addEventListener("change", function(){
+    const raw = balIn.value.replace(/\u2212/g, "-").trim(); if (raw === "") return;
+    state.balances.push({ id:uid(), date:isoDate(NOW), amount:round2(num(raw)), at:Date.now() }); commit(); renderAll(); toast("Balance saved");
+  });
+  const balHint = lastBal ? "Last entered: " + money2(lastBal.amount) + " on " + lastBal.date + ". Type today's balance to update the app's cash flow."
+    : "Type what your bank app shows \u2014 the app's cash flow forecast starts from it.";
 
   function sel(opts, cur, onch){
     const s2 = el("select",{});
@@ -830,6 +925,8 @@ function setupPanel(){
       fld("Currency symbol", cur),
       fld("Carry over leftovers", carry, "Adds last cycle's remainder to this cycle's income."),
       fld("Carried in this cycle", carryAmt, carryHint),
+      fld("Bank shift pay arrives", payRule, "Used for the cash flow. You can change any single shift on the Bank shifts tab."),
+      fld("Bank balance today", balIn, balHint),
       fld("Bank shift take-home", onOff, "Turns gross shift pay into what reaches your bank."),
       fld("Income tax on extra earnings", sel(TAX_OPTS, state.deductions.tax, function(v){ state.deductions.tax=v; recalcShifts(); commit(); renderAll(); }), "Your marginal rate."),
       fld("National Insurance", selS(NIMODE_OPTS, state.deductions.niMode, function(v){ state.deductions.niMode=v; recalcShifts(); commit(); renderAll(); })),
@@ -842,6 +939,7 @@ function setupPanel(){
       stat("Expenses", money2(expTotal())),
       stat("Left this cycle", money0(rem), rem>=0 ? "sh-pos" : "sh-neg"),
       stat("Carried in", money0(carriedOver())),
+      stat("Spent outside budget", money0(extraSpend())),
       stat("Bank shifts (gross)", money2(grossTotal())),
       stat("Bank shifts (take-home)", money2(bankTotal()), "sh-pos")
     )
@@ -905,6 +1003,7 @@ function renderPanel(){
   p.innerHTML = "";
   p.appendChild(tab === "expenses" ? expensesPanel()
     : tab === "shifts" ? shiftsPanel()
+    : tab === "spending" ? spendingPanel()
     : tab === "goals" ? goalsPanel()
     : tab === "history" ? historyPanel()
     : setupPanel());

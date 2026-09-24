@@ -134,7 +134,8 @@ const SVG = {
   up:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5m0 0-6 6m6-6 6 6"/></svg>',
   down:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14m0 0 6-6m-6 6-6-6"/></svg>',
   upload:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V9m0 0 4 4m-4-4-4 4M5 3h14"/></svg>',
-  palette:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3C7 3 3 6.8 3 11.6 3 16.4 6.9 20 11.4 20c1.2 0 2-.8 2-1.8 0-.5-.2-.9-.5-1.2-.3-.4-.5-.8-.5-1.2 0-1 .8-1.8 1.8-1.8h2.3c3 0 5.5-2.3 5.5-5.3C22 5.2 17.6 3 12 3Z"/><circle cx="7.4" cy="11.6" r="1.65" fill="#FF4D7E" stroke="none"/><circle cx="9.9" cy="7.4" r="1.65" fill="#FF9F1C" stroke="none"/><circle cx="14.6" cy="6.9" r="1.65" fill="#2EE59D" stroke="none"/><circle cx="18" cy="10" r="1.65" fill="#7C5CFF" stroke="none"/></svg>'
+  palette:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3C7 3 3 6.8 3 11.6 3 16.4 6.9 20 11.4 20c1.2 0 2-.8 2-1.8 0-.5-.2-.9-.5-1.2-.3-.4-.5-.8-.5-1.2 0-1 .8-1.8 1.8-1.8h2.3c3 0 5.5-2.3 5.5-5.3C22 5.2 17.6 3 12 3Z"/><circle cx="7.4" cy="11.6" r="1.65" fill="#FF4D7E" stroke="none"/><circle cx="9.9" cy="7.4" r="1.65" fill="#FF9F1C" stroke="none"/><circle cx="14.6" cy="6.9" r="1.65" fill="#2EE59D" stroke="none"/><circle cx="18" cy="10" r="1.65" fill="#7C5CFF" stroke="none"/></svg>',
+  chev:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>'
 };
 
 /* ---------------------------------- helpers -------------------------------- */
@@ -195,30 +196,30 @@ function makeDefaults(){
   return {
     salary: 2400, currency: "\u00A3", payDay: 25,
     expenses: [
-      { id: uid(), name: "Rent", category: "rent", amount: 850 },
-      { id: uid(), name: "Council tax", category: "council", amount: 140 },
-      { id: uid(), name: "Electricity & gas", category: "electric", amount: 110 },
-      { id: uid(), name: "Broadband", category: "internet", amount: 32 },
-      { id: uid(), name: "Mobile", category: "phone", amount: 18 },
-      { id: uid(), name: "Groceries", category: "groceries", amount: 280 },
-      { id: uid(), name: "Travel", category: "transport", amount: 90 },
-      { id: uid(), name: "Savings", category: "savings", amount: 200 }
+      { id: uid(), name: "Rent", category: "rent", amount: 850, due: 1 },
+      { id: uid(), name: "Council tax", category: "council", amount: 140, due: 1 },
+      { id: uid(), name: "Electricity & gas", category: "electric", amount: 110, due: 12 },
+      { id: uid(), name: "Broadband", category: "internet", amount: 32, due: 15 },
+      { id: uid(), name: "Mobile", category: "phone", amount: 18, due: 20 },
+      { id: uid(), name: "Groceries", category: "groceries", amount: 280, spread: true },
+      { id: uid(), name: "Travel", category: "transport", amount: 90, spread: true },
+      { id: uid(), name: "Savings", category: "savings", amount: 200, due: 26 }
     ],
     shifts: [], paid: {},
     goals: [
       { id: uid(), glyph: "lifebuoy", name: "Emergency fund", target: 3000, saved: 750, color: "#00C48C", targetDate: null },
       { id: uid(), glyph: "plane", name: "Holiday", target: 1500, saved: 420, color: "#6D28D9", targetDate: SEED_BY }
     ],
-    history: [], lastCycleId: null, carryOver: true, carryEdits: {},
+    history: [], lastCycleId: null, carryOver: true, carryEdits: {}, spends: [], balances: [], shiftPay: "next",
     deductions: { on: true, tax: 20, niMode: "main", niFreq: "weekly", pensionOn: false, pension: 9.8 },
     updatedAt: 0
   };
 }
-function blank(){ return { salary:0, currency:"\u00A3", payDay:25, expenses:[], shifts:[], paid:{}, goals:[], history:[], lastCycleId:null, carryOver:true, carryEdits:{},
+function blank(){ return { salary:0, currency:"\u00A3", payDay:25, expenses:[], shifts:[], paid:{}, goals:[], history:[], lastCycleId:null, carryOver:true, carryEdits:{}, spends:[], balances:[], shiftPay:"next",
   deductions:{ on:true, tax:20, niMode:"main", niFreq:"weekly", pensionOn:false, pension:9.8 }, updatedAt:0 }; }
 function normalize(o){
   const s = Object.assign(blank(), o || {});
-  ["expenses","shifts","goals","history"].forEach(function(k){ if (!Array.isArray(s[k])) s[k] = []; });
+  ["expenses","shifts","goals","history","spends","balances"].forEach(function(k){ if (!Array.isArray(s[k])) s[k] = []; });
   if (!s.paid || typeof s.paid !== "object") s.paid = {};
   if (!s.currency) s.currency = "\u00A3";
   if (!s.payDay) s.payDay = 25;
@@ -230,6 +231,21 @@ function normalize(o){
       if (/^\d{4}-\d{2}$/.test(k) && s.carryEdits[k] !== null && s.carryEdits[k] !== "" && Number.isFinite(v)) ce[k] = round2(v); });
   }
   s.carryEdits = ce;
+  /* cash flow: the day each bill goes out (or "bit by bit"), logged spends, and bank balances you've typed in */
+  if (s.shiftPay !== "month") s.shiftPay = "next";
+  s.expenses = s.expenses.map(function(e){
+    const d = parseInt(e.due, 10); e.due = (d >= 1 && d <= 31) ? d : null;
+    if (typeof e.spread !== "boolean") e.spread = SPREAD_CATS.indexOf(e.category) >= 0;
+    if (e.spread) e.due = null;
+    return e;
+  });
+  const isDay = function(v){ return typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v); };
+  s.spends = s.spends.filter(function(x){ return x && isDay(x.date) && Number.isFinite(Number(x.amount)) && Number(x.amount) >= 0; })
+    .map(function(x){ return { id: x.id || uid(), date: x.date, amount: round2(Number(x.amount)), note: typeof x.note === "string" ? x.note : "",
+      cat: CAT[x.cat] ? x.cat : "other", at: Number.isFinite(Number(x.at)) ? Number(x.at) : 0 }; });
+  s.balances = s.balances.filter(function(b){ return b && isDay(b.date) && b.amount !== null && b.amount !== "" && Number.isFinite(Number(b.amount)); })
+    .map(function(b){ return { id: b.id || uid(), date: b.date, amount: round2(Number(b.amount)), at: Number.isFinite(Number(b.at)) ? Number(b.at) : 0 }; })
+    .sort(function(a, b){ return a.at - b.at; }).slice(-60);
   const dd = s.deductions || {};
   let niMode = dd.niMode;
   if (!niMode) niMode = (dd.ni === 2) ? "upper" : (dd.ni === 0) ? "off" : "main";
@@ -242,7 +258,8 @@ function normalize(o){
     pension: (dd.pension != null && dd.pension > 0) ? dd.pension : 9.8
   };
   /* older shifts stored only a single figure - treat it as gross */
-  s.shifts = s.shifts.map(function(x){ if (x.gross == null) x.gross = x.amount || 0; return x; });
+  s.shifts = s.shifts.map(function(x){ if (x.gross == null) x.gross = x.amount || 0;
+    if (!(typeof x.paidOn === "string" && /^\d{4}-\d{2}-\d{2}$/.test(x.paidOn))) x.paidOn = null; return x; });
   s.goals = s.goals.map(function(g){
     if (!g.glyph) g.glyph = (g.emoji && EMOJI_MAP[g.emoji]) ? EMOJI_MAP[g.emoji] : "target";
     if (GOAL_COLORS.indexOf(g.color) < 0) g.color = GOAL_COLORS[0];
@@ -377,7 +394,7 @@ function finishedExpenses(){ return state.expenses.filter(function(e){ return !e
 function paymentsLeft(e){ if (!e.endsOn) return null; return Math.max(0, monthsBetween(cyc().id, e.endsOn) + 1); }
 function remainingCost(e){ const n = paymentsLeft(e); return n == null ? null : n * (e.amount||0); }
 function expTotal(){ return activeExpenses().reduce(function(a,e){ return a+(e.amount||0); }, 0); }
-function remaining(){ return income() - expTotal(); }
+function remaining(){ return income() - expTotal() - extraSpend(); }
 function pctRemain(){ const i = income(); return i > 0 ? remaining()/i : 0; }
 function ringColor(){ const r = remaining(), i = income(); return r < 0 ? "var(--ring-neg)" : (i > 0 && r/i < 0.15) ? "var(--ring-low)" : "var(--ring-ok)"; }
 const pk = (id) => cyc().id + "__" + id;
@@ -412,13 +429,14 @@ function archiveCycle(id){
     const t = new Date(s.date + "T00:00:00").getTime();
     return (t >= start.getTime() && t < end.getTime()) ? a + (s.amount || 0) : a;
   }, 0);
-  const expenses = activeExpenses(id).reduce(function(a, e){ return a + (e.amount || 0); }, 0);
+  const extra = extraSpendFor(cycleById(id));
+  const expenses = round2(activeExpenses(id).reduce(function(a, e){ return a + (e.amount || 0); }, 0) + extra);
   const carriedIn = carryFor(id);
   const inc = (state.salary || 0) + shiftsTotal + carriedIn;
   state.history.push({
     cycleId: id, label: start.toLocaleDateString("en-GB", { month: "short", year: "numeric" }),
     income: inc, expenses: expenses, saved: inc - expenses,
-    salary: state.salary || 0, shiftsTotal: shiftsTotal, carriedIn: carriedIn, auto: true
+    salary: state.salary || 0, shiftsTotal: shiftsTotal, carriedIn: carriedIn, extra: extra, auto: true
   });
 }
 function archiveIfRolled(){
@@ -431,6 +449,10 @@ function archiveIfRolled(){
   let id = state.lastCycleId, guard = 0;
   while (id !== curId && guard++ < 240){ archiveCycle(id); id = shiftCycleId(id, 1); }
   state.history.sort(function(a, b){ return a.cycleId < b.cycleId ? -1 : 1; });
+  /* keep about a year of logged spends and balance checks */
+  const keep = isoDate(addDays(NOW, -400));
+  state.spends = state.spends.filter(function(x){ return x.date >= keep; });
+  state.balances = state.balances.filter(function(b){ return b.date >= keep; });
   state.lastCycleId = curId; state.updatedAt = Date.now(); persistLocal();
 }
 
@@ -517,9 +539,12 @@ function renderApp(){
     h("div",{class:"pf-pills"},
       h("div",{class:"pf-pill"}, h("span",{class:"pf-pilllab"},"Income"), h("span",{class:"pf-pillval"}, money0(income()))),
       h("div",{class:"pf-pilldiv"}),
-      h("div",{class:"pf-pill"}, h("span",{class:"pf-pilllab"},"Expenses"), h("span",{class:"pf-pillval"}, money0(expTotal())))
+      h("div",{class:"pf-pill"}, h("span",{class:"pf-pilllab"},"Expenses"), h("span",{class:"pf-pillval"}, money0(expTotal() + extraSpend())))
     )
   ));
+
+  /* cash flow */
+  app.appendChild(cashCard());
 
   /* income card */
   const shifts = cycleShifts().slice().sort(function(a,b){ return a.date<b.date?1:-1; });
@@ -627,6 +652,9 @@ function renderApp(){
     h("span",{}, "Still to pay ", h("strong",{}, money2(Math.max(0,total-paidTotal)))),
     h("span",{}, paidCount + "/" + liveExp.length + " paid")
   ));
+  const xtra = extraSpend();
+  if (xtra > 0) expCard.appendChild(h("div",{class:"pf-xtra", role:"button", tabindex:"0", onClick:openCashflow, onKeydown:onKey(openCashflow)},
+    glyphSvg("receipt",16,"var(--hot)"), h("span",{}, "Plus ", h("strong",{}, money2(xtra)), " of logged spending outside your budget")));
   const expList = h("div",{class:"pf-list"});
   if (liveExp.length){
     liveExp.slice().sort(function(a,b){ return (b.amount||0)-(a.amount||0); }).forEach(function(e){
@@ -637,7 +665,7 @@ function renderApp(){
         h("span",{class:"pf-ic", style:{background:tileBg(c.color)}}, glyphSvg(c.glyph,21,c.color)),
         h("div",{class:"pf-expmid"},
           h("span",{class:"pf-expname"}, e.name),
-          h("span",{class:"pf-expcat"}, c.label, (function(){
+          h("span",{class:"pf-expcat"}, c.label + dueTxt(e), (function(){
             const n = paymentsLeft(e);
             if (n == null) return null;
             const endLbl = (function(){ const p=e.endsOn.split("-").map(Number); return new Date(p[0],p[1]-1,1).toLocaleDateString("en-GB",{month:"short",year:"numeric"}); })();
@@ -781,6 +809,7 @@ function openSalary(){
 
 function openExpense(existing){
   let cat = existing ? existing.category : "other";
+  let spread = existing ? !!existing.spread : false, spreadTouched = !!existing;
   const name = h("input",{class:"pf-input", placeholder:"e.g. Rent", value: existing?existing.name:""});
   const amt = amtInput(existing?existing.amount:"");
   const ends = h("input",{class:"pf-input", type:"month", value:(existing&&existing.endsOn)?existing.endsOn:""});
@@ -793,12 +822,31 @@ function openExpense(existing){
       : n+" payment"+(n===1?"":"s")+" left"+(a?" \u00B7 "+money0(n*a)+" still to pay":"")+". It stops counting after that.";
   }
   ends.addEventListener("change", updEnds); amt._input.addEventListener("input", updEnds); updEnds();
+  const whenSeg = h("div",{class:"pf-segctl", role:"radiogroup", "aria-label":"How it goes out"});
+  const daySel = h("select",{class:"pf-input", "aria-label":"Day it leaves your account"});
+  daySel.appendChild(h("option",{value:""}, "Not set yet"));
+  for (let dd = 1; dd <= 31; dd++) daySel.appendChild(h("option",{value:String(dd)}, "The "+ordinal(dd)));
+  daySel.value = (existing && existing.due) ? String(existing.due) : "";
+  const dayWrap = h("div",{class:"pf-field"}, h("label",{class:"pf-lab"},"Day it leaves your account"), daySel);
+  const whenHint = h("span",{class:"pf-hint"});
+  function paintWhen(){
+    whenSeg.innerHTML = "";
+    [[false,"On a set day"],[true,"Bit by bit"]].forEach(function(o){
+      whenSeg.appendChild(h("button",{type:"button", role:"radio", "aria-checked": spread===o[0]?"true":"false",
+        onClick:function(){ spread = o[0]; spreadTouched = true; paintWhen(); }}, o[1]));
+    });
+    dayWrap.style.display = spread ? "none" : "";
+    whenHint.textContent = spread
+      ? "For things like groceries and fuel. The cash flow spreads it over the days to payday, and spends you log come out of it."
+      : "It shows on your cash flow on this day each month. Not set yet? It's shown on payday.";
+  }
+  paintWhen();
   const grid = h("div",{class:"pf-catgrid"});
   function paint(){
     grid.innerHTML = "";
     CAT_ORDER.forEach(function(k){
       const c = CAT[k]; const sel = k===cat;
-      const chip = h("button",{type:"button", class:"pf-catchip"+(sel?" pf-catchip--on":""), onClick:function(){ cat=k; if (!name.value.trim()) name.value=c.label; paint(); }},
+      const chip = h("button",{type:"button", class:"pf-catchip"+(sel?" pf-catchip--on":""), onClick:function(){ cat=k; if (!name.value.trim()) name.value=c.label; if (!spreadTouched){ spread = SPREAD_CATS.indexOf(k) >= 0; paintWhen(); } paint(); }},
         h("span",{class:"pf-catic", style:{background:tileBg(c.color)}}, glyphSvg(c.glyph,19,c.color)),
         h("span",{class:"pf-catlab"}, c.label));
       if (sel){ chip.style.borderColor = c.color; chip.style.background = tint(c.color,0.10); }
@@ -811,19 +859,31 @@ function openExpense(existing){
   act.appendChild(primaryBtn("Save", function(){
     const nm = name.value.trim(); const a = parseFloat(amt._input.value);
     if (!nm || isNaN(a)) return;
-    upsertExpense({ id: existing?existing.id:uid(), name:nm, category:cat, amount:Math.max(0,a||0), endsOn: ends.value || null }); closeSheet();
+    upsertExpense({ id: existing?existing.id:uid(), name:nm, category:cat, amount:Math.max(0,a||0), endsOn: ends.value || null,
+      due: spread ? null : (parseInt(daySel.value,10) || null), spread: spread }); closeSheet();
   }));
   const fEnds = h("div",{class:"pf-field"}, h("label",{class:"pf-lab"},"Final payment month (optional)"), ends, endsInfo);
-  openSheet(existing?"Edit expense":"Add expense", h("div",{}, field("Name", name), field("Amount per month", amt), fEnds, field("Category", grid), act));
+  openSheet(existing?"Edit expense":"Add expense", h("div",{}, field("Name", name), field("Amount per month", amt),
+    h("div",{class:"pf-field"}, h("label",{class:"pf-lab"},"How it goes out"), whenSeg, whenHint), dayWrap,
+    fEnds, field("Category", grid), act));
 }
 
 function openShift(existing){
-  const today = new Date().toISOString().slice(0,10);
+  const today = isoDate(new Date());
   const date = h("input",{class:"pf-input", type:"date", value: existing?existing.date:today});
   const label = h("input",{class:"pf-input", placeholder:"e.g. Long day \u00B7 Renal", value: existing?existing.label:""});
   const hours = h("input",{class:"pf-input", inputmode:"decimal", placeholder:"0", value: (existing&&existing.hours!=null)?existing.hours:""});
   const rate = amtInput((existing&&existing.rate!=null)?existing.rate:"");
   const amt = amtInput(existing ? (existing.gross != null ? existing.gross : existing.amount) : "");
+  const payOn = h("input",{class:"pf-input", type:"date", "aria-label":"Arrives in your account", value:(existing && existing.paidOn) ? existing.paidOn : ""});
+  const payHint = h("span",{class:"pf-hint"});
+  function paintPay(){
+    const auto = date.value ? autoPayDate({ date: date.value }) : null;
+    payHint.textContent = !auto ? "" : (payOn.value && payOn.value !== auto)
+      ? "You've set this date. Normally it would arrive on " + fmtDay(auto) + "."
+      : "Leave it blank and it's expected on " + fmtDay(auto) + ", " + (state.shiftPay === "month" ? "payday in the month after the shift." : "the next payday after the shift.");
+  }
+  date.addEventListener("change", paintPay); payOn.addEventListener("change", paintPay); paintPay();
   const bd = h("div",{class:"pf-bd"});
   function paintBd(){
     const d = activeDed();
@@ -859,16 +919,17 @@ function openShift(existing){
     const g = round2(parseFloat(amt._input.value)||0); if (!(g>0)) return;
     upsertShift({ id: existing?existing.id:uid(), date:date.value, label:label.value.trim(),
       hours:parseFloat(hours.value)||null, rate:parseFloat(rate._input.value)||null,
-      gross:g, amount:g });
+      gross:g, amount:g, paidOn: (payOn.value && payOn.value !== autoPayDate({ date: date.value })) ? payOn.value : null });
     recalcShifts(); commit(); closeSheet();
   }));
   openSheet(existing?"Edit bank shift":"Add bank shift", h("div",{},
-    h("p",{class:"pf-help"},"Log extra shifts you pick up through the bank. They count towards this pay cycle only."),
+    h("p",{class:"pf-help"},"Log extra shifts you pick up through the bank. They count towards this pay cycle\u2019s budget, and the cash flow shows the money on the day it reaches your account."),
     field("Date worked", date),
     field("Label (optional)", label),
     h("div",{class:"pf-grid2"}, field("Hours", hours), field("Rate / hr", rate)),
     field("Gross pay for this shift", amt, "Fills in from hours \u00D7 rate \u2014 or type a flat amount. Enter it before deductions."),
     bd,
+    h("div",{class:"pf-field"}, h("label",{class:"pf-lab"},"Arrives in your account"), payOn, payHint),
     act
   ));
 }
@@ -974,6 +1035,386 @@ function exportData(){
 
 let toastT = null;
 function toast(msg){ const t = document.getElementById("pf-toast"); if (!t) return; t.textContent = msg; t.classList.add("pf-toast--on"); clearTimeout(toastT); toastT = setTimeout(function(){ t.classList.remove("pf-toast--on"); }, 2300); }
+
+/* -------------------------------- cash flow -------------------------------- */
+/* categories usually spent bit by bit: new expenses in these start "spread over the cycle" */
+const SPREAD_CATS = ["groceries","transport","fuel","dining"];
+function isoDate(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+function parseISO(v){ const p = String(v).split("-").map(Number); return new Date(p[0], p[1]-1, p[2]); }
+function addDays(d, n){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()+n); }
+function dayDiff(a, b){ return Math.round((b.getTime() - a.getTime())/86400000); }
+function fmtDay(v){ return parseISO(v).toLocaleDateString("en-GB",{weekday:"short", day:"numeric", month:"short"}); }
+function fmtShort(v){ return parseISO(v).toLocaleDateString("en-GB",{day:"numeric", month:"short"}); }
+function paydayIn(y, m){ return new Date(y, m, state.payDay || 25); }
+function cycleById(id){ const p = id.split("-").map(Number), pd = state.payDay || 25; return { id:id, start:new Date(p[0], p[1]-1, pd), end:new Date(p[0], p[1], pd) }; }
+function dueTxt(e){ return e.spread ? " \u00B7 bit by bit" : e.due ? " \u00B7 the "+ordinal(e.due) : ""; }
+/* bank shift pay lands on a payday: the next one after the shift (default), or the one in the month after it */
+function nextPaydayAfter(v){ const d = parseISO(v); let p = paydayIn(d.getFullYear(), d.getMonth()); if (p <= d) p = paydayIn(d.getFullYear(), d.getMonth()+1); return p; }
+function autoPayDate(sh){ const d = parseISO(sh.date); return isoDate(state.shiftPay === "month" ? paydayIn(d.getFullYear(), d.getMonth()+1) : nextPaydayAfter(sh.date)); }
+function shiftPayDate(sh){ return sh.paidOn || autoPayDate(sh); }
+/* where a bill's day of the month falls inside a pay cycle (the 31st becomes the 30th in a short month) */
+function billDate(e, C){
+  if (e.due == null) return null;
+  for (let k = 0; k < 2; k++){
+    const y = C.start.getFullYear(), m = C.start.getMonth() + k;
+    const d = new Date(y, m, Math.min(e.due, new Date(y, m+1, 0).getDate()));
+    if (d >= C.start && d < C.end) return d;
+  }
+  return null;
+}
+function catBudgets(cid){ const b = {}; activeExpenses(cid).forEach(function(e){ if (e.spread) b[e.category] = round2((b[e.category]||0) + (e.amount||0)); }); return b; }
+function spendsIn(C){ const a = isoDate(C.start), z = isoDate(addDays(C.end, -1)); return state.spends.filter(function(x){ return x.date >= a && x.date <= z && x.amount > 0; }); }
+/* logged spending your plan doesn't cover: anything over a bit-by-bit budget, or in a category with no budget */
+function extraSpendFor(C, upto){
+  const b = catBudgets(C.id), by = {};
+  /* spends dated after "upto" (today) are plans: they're in the forecast, and count as spent once their day comes */
+  spendsIn(C).forEach(function(x){ if (upto && x.date > upto) return; by[x.cat] = (by[x.cat]||0) + x.amount; });
+  return round2(Object.keys(by).reduce(function(t, k){ return t + (b[k] ? Math.max(0, by[k] - b[k]) : by[k]); }, 0));
+}
+function extraSpend(){ return extraSpendFor(cyc(), isoDate(NOW)); }
+function spentIn(cat, C, exceptId){ return round2(spendsIn(C).reduce(function(a, x){ return a + ((x.cat === cat && x.id !== exceptId) ? x.amount : 0); }, 0)); }
+
+/* Day-by-day forecast from payday to the day before the next one.
+   Starts from the latest bank balance you typed in this cycle; otherwise from last cycle's leftover. */
+function cashflow(offset){
+  offset = offset > 0 ? 1 : 0;
+  const C = offset ? cycleById(shiftCycleId(cyc().id, 1)) : cyc(), cid = C.id, S = C.start, P = C.end, E = addDays(P, -1), N = Math.max(1, dayDiff(S, P));
+  const now0 = new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate()), iNow = isoDate(now0);
+  const T = now0 < S ? S : now0 > E ? E : now0;
+  const iS = isoDate(S), iE = isoDate(E), iP = isoDate(P), iT = isoDate(T);
+  const ev = {}; const add = function(v, e){ (ev[v] = ev[v] || []).push(e); };
+  const anchor = offset ? null : (state.balances.filter(function(b){ return b.date >= iS && b.date <= iT; })
+    .sort(function(a, b){ return a.at - b.at; }).pop() || null);
+  const iA = anchor ? anchor.date : null;
+  /* already inside the balance you typed in? (dated earlier, or logged before it on the same day) */
+  const inBal = function(v, at){ return !!anchor && (v < iA || (v === iA && (at == null || at <= anchor.at))); };
+
+  const payBy = {}; let owed = 0;
+  state.shifts.forEach(function(sh){
+    if (!sh.date || !(sh.amount > 0)) return;
+    const pd = shiftPayDate(sh); (payBy[pd] = payBy[pd] || []).push(sh);
+    /* worked last cycle (so already counted in the carry-over) but not in the bank until this cycle */
+    if (!offset && sh.date < iS && pd >= iS) owed += sh.amount;
+  });
+  owed = round2(owed);
+  const carry = carriedOver();
+  /* next month starts where this month is forecast to finish */
+  const opening = offset ? cashflow(0).before : (state.carryOver ? round2(carry - owed) : 0);
+  add(iS, { kind:"open", amount:opening, forecast: !!offset });
+  if (state.salary) add(iS, { kind:"salary", amount:state.salary });
+  Object.keys(payBy).forEach(function(pd){
+    if (pd < iS || pd > iE) return;
+    const list = payBy[pd];
+    add(pd, { kind:"pay", amount: round2(list.reduce(function(a, sh){ return a + sh.amount; }, 0)), shifts:list });
+  });
+  activeExpenses(cid).forEach(function(e){
+    if (e.spread || !(e.amount > 0)) return;
+    const d = billDate(e, C);
+    add(d ? isoDate(d) : iS, { kind:"bill", amount:-e.amount, exp:e, undated:!d, paid: !!state.paid[cid + "__" + e.id] });
+  });
+  const spends = spendsIn(C);
+  spends.forEach(function(x){ add(x.date, { kind:"spend", amount:-x.amount, spend:x, inBal: inBal(x.date, x.at), planned: x.date > iNow }); });
+  state.balances.forEach(function(b){ if (b.date >= iS && b.date <= iE) add(b.date, { kind:"check", amount:b.amount, bal:b, anchor: !!anchor && b.id === anchor.id }); });
+
+  /* bit-by-bit budgets: whatever is left of each is spread over the days from today to payday */
+  const budgets = catBudgets(cid), elapsedA = anchor ? dayDiff(S, parseISO(iA)) : 0;
+  const daysLeft = Math.max(1, dayDiff(T, P));
+  let pot = 0;
+  Object.keys(budgets).forEach(function(c){
+    const B = budgets[c]; let before = 0, after = 0;
+    spends.forEach(function(x){ if (x.cat !== c) return; if (inBal(x.date, x.at)) before += x.amount; else after += x.amount; });
+    /* if you don't log a category, assume your daily share had gone by the time you checked your balance */
+    const assumed = Math.max(before, anchor ? B * elapsedA / N : 0);
+    pot += Math.max(0, B - assumed - after);
+  });
+  pot = round2(pot);
+  const perDay = pot / daysLeft;
+
+  const rank = { open:0, salary:1, pay:2, bill:3, spend:4, check:5 };
+  let bal = 0, delta = null, lowest = null;
+  const days = [];
+  for (let d = S; d < P; d = addDays(d, 1)){
+    const v = isoDate(d);
+    const key = function(e){ return (e.kind === "spend" && anchor && v === iA && !e.inBal) ? 6 : rank[e.kind]; };
+    const list = (ev[v] || []).slice().sort(function(a, b){ return key(a) - key(b) || (a.kind === "spend" && b.kind === "spend" ? a.spend.at - b.spend.at : 0); });
+    list.forEach(function(e){
+      if (e.kind === "open"){ bal = e.amount; return; }
+      if (e.kind === "check"){ if (e.anchor){ delta = round2(e.amount - bal); e.delta = delta; bal = e.amount; } return; }
+      /* once you've typed in your balance, bills you've ticked as paid are already inside it */
+      if (e.kind === "bill" && anchor && e.paid && v > iA){ e.skip = true; return; }
+      bal += e.amount;
+    });
+    const spread = d >= T ? perDay : 0;
+    bal -= spread;                                   /* full precision inside, pennies only for display */
+    const day = { date:v, events:list, end:round2(bal), spread:round2(spread), past: d < T, today: !offset && v === iT };
+    days.push(day);
+    if (d >= T && (!lowest || day.end < lowest.end)) lowest = day;
+  }
+  const nextList = payBy[iP] || [];
+  const later = round2(state.shifts.reduce(function(a, sh){ return a + ((sh.amount > 0 && sh.date && sh.date <= iE && shiftPayDate(sh) > iP) ? sh.amount : 0); }, 0));
+  return { offset:offset, iNow:iNow, planned: round2(spends.reduce(function(a, x){ return a + (x.date > iNow ? x.amount : 0); }, 0)),
+    C:C, S:iS, E:iE, P:iP, T:iT, N:N, days:days, opening:opening, carry:carry, owed:owed, anchor:anchor, delta:delta,
+    pot:pot, perDay:round2(perDay), daysLeft:daysLeft, lowest:lowest, before: days.length ? days[days.length-1].end : opening,
+    nextSalary: state.salary || 0, nextShifts:nextList, nextPay: round2(nextList.reduce(function(a, sh){ return a + sh.amount; }, 0)), later:later, budgets:budgets };
+}
+
+function cashChart(cf, W, H, gid){
+  const pts = cf.days.map(function(d){ return d.end; });
+  if (!pts.length) return h("div",{});
+  const lo = Math.min(0, Math.min.apply(null, pts)), hi = Math.max(1, Math.max.apply(null, pts));
+  const pad = 7, n = Math.max(1, pts.length - 1);
+  const X = function(i){ return pad + i * (W - 2*pad) / n; };
+  const Y = function(v){ return pad + (hi - v) * (H - 2*pad) / ((hi - lo) || 1); };
+  let ti = -1; cf.days.forEach(function(d, i){ if (d.today) ti = i; });
+  const hasToday = ti >= 0; if (!hasToday) ti = 0;
+  const path = function(a, b){ let p = ""; for (let i = a; i <= b; i++) p += (i === a ? "M" : "L") + X(i).toFixed(1) + " " + Y(pts[i]).toFixed(1); return p; };
+  const grad = svgEl("linearGradient",{id:gid, x1:"0", y1:"0", x2:"0", y2:"1"},
+    svgEl("stop",{offset:"0", style:"stop-color:var(--accent);stop-opacity:.28"}),
+    svgEl("stop",{offset:"1", style:"stop-color:var(--accent);stop-opacity:0"}));
+  const svg = svgEl("svg",{viewBox:"0 0 "+W+" "+H, width:"100%", class:"pf-cfchart", "aria-hidden":"true"}, svgEl("defs",{}, grad),
+    svgEl("path",{d: path(0, n) + " L" + X(n).toFixed(1) + " " + (H - pad) + " L" + X(0).toFixed(1) + " " + (H - pad) + " Z", fill:"url(#"+gid+")"}));
+  if (lo < 0) svg.appendChild(svgEl("path",{d:"M"+pad+" "+Y(0).toFixed(1)+" H"+(W-pad), style:"stroke:var(--neg)", "stroke-width":"1.2", "stroke-dasharray":"3 3", fill:"none"}));
+  if (hasToday) svg.appendChild(svgEl("path",{d:path(0, ti), fill:"none", style:"stroke:var(--accent)", "stroke-width":"2.6", "stroke-linecap":"round", "stroke-linejoin":"round"}));
+  if (ti < n) svg.appendChild(svgEl("path",{d:path(ti, n), fill:"none", style:"stroke:var(--accent)", "stroke-width":"2.6", "stroke-dasharray":"5 5", "stroke-linecap":"round", opacity:".75"}));
+  const low = cf.lowest; let li = -1; cf.days.forEach(function(d, i){ if (low && d.date === low.date) li = i; });
+  if (li >= 0 && li !== ti) svg.appendChild(svgEl("circle",{cx:X(li).toFixed(1), cy:Y(pts[li]).toFixed(1), r:"4", style:"fill:"+(low.end < 0 ? "var(--neg)" : "var(--warn)")}));
+  if (hasToday) svg.appendChild(svgEl("circle",{cx:X(ti).toFixed(1), cy:Y(pts[ti]).toFixed(1), r:"5", style:"fill:var(--card);stroke:var(--accent)", "stroke-width":"3"}));
+  return svg;
+}
+function todayEnd(cf){ const d = cf.days.filter(function(x){ return x.today; })[0]; return d ? d.end : cf.before; }
+function stopThen(fn){ return function(ev){ if (ev && ev.stopPropagation) ev.stopPropagation(); fn(); }; }
+function cashCard(){
+  const cf = cashflow(), low = cf.lowest, nf = cashflow(1);
+  const warn = low && low.end < 0;
+  return h("section",{class:"pf-card pf-cash", role:"button", tabindex:"0", "aria-label":"Open cash flow", onClick:openCashflow, onKeydown:function(ev){ if (ev.target === ev.currentTarget) onKey(openCashflow)(ev); }},
+    h("div",{class:"pf-cardhead"}, h("h2",{class:"pf-cardtitle"},"Cash flow"), h("span",{class:"pf-cashmore"}, "Timeline ", icon("chev",13))),
+    h("div",{class:"pf-cashtop"},
+      h("div",{class:"pf-cashstat"}, h("span",{class:"pf-cashlab"},"Before payday"),
+        h("span",{class:"pf-cashval "+(cf.before < 0 ? "pf-neg" : "pf-pos")}, money0(cf.before)), h("span",{class:"pf-cashsub"}, fmtShort(cf.E))),
+      /* a lowest point only earns its space when it's a dip before payday; otherwise show today */
+      (low && low.date !== cf.E)
+        ? h("div",{class:"pf-cashstat"}, h("span",{class:"pf-cashlab"},"Lowest point"),
+            h("span",{class:"pf-cashval"+(warn ? " pf-neg" : "")}, money0(low.end)), h("span",{class:"pf-cashsub"}, fmtShort(low.date)))
+        : h("div",{class:"pf-cashstat"}, h("span",{class:"pf-cashlab"},"Today"),
+            h("span",{class:"pf-cashval"+(todayEnd(cf) < 0 ? " pf-neg" : "")}, money0(todayEnd(cf))), h("span",{class:"pf-cashsub"}, cf.anchor ? "from your balance" : "estimated"))),
+    cashChart(cf, 340, 92, "cfg-card"),
+    h("div",{class:"pf-cashmeta"}, warn ? h("strong",{class:"pf-neg"}, "Heading below zero on " + fmtShort(low.date) + ". ")
+      : null, cf.pot > 0 ? money2(cf.perDay) + " a day for day-to-day spending" : "No bit-by-bit budgets left",
+      cf.planned > 0 ? " \u00B7 " + money2(cf.planned) + " planned" : "",
+      cf.anchor ? " \u00B7 from your balance on " + fmtShort(cf.anchor.date) : ""),
+    h("div",{class:"pf-cashbtns"},
+      h("button",{type:"button", class:"pf-cashbtn pf-cashbtn--go", onClick:stopThen(function(){ openSpend(); })}, icon("plus",15), " Log spend"),
+      h("button",{type:"button", class:"pf-cashbtn", onClick:stopThen(function(){ openBalance(); })}, glyphSvg("landmark",15), " Update balance")),
+    h("div",{class:"pf-cashnext", role:"button", tabindex:"0", "aria-label":"Open next month's forecast",
+        onClick:stopThen(function(){ openCashflow(1); }),
+        onKeydown:function(ev){ if (ev.key === "Enter" || ev.key === " "){ ev.preventDefault(); ev.stopPropagation(); openCashflow(1); } }},
+      h("span",{}, "Next month"),
+      h("span",{class:"pf-cashnextval"}, "about ", h("strong",{class: nf.before < 0 ? "pf-neg" : ""}, money0(nf.before)), " before " + fmtShort(nf.E)),
+      icon("chev",13))
+  );
+}
+function cfTile(glyph, color, cls){ return h("span",{class:"pf-ic"+(cls?" "+cls:""), style: color ? {background:tileBg(color)} : null}, glyphSvg(glyph, 20, color || null)); }
+function cfAmt(n, cls){ return h("span",{class:"pf-expamt "+(cls || (n > 0 ? "pf-pos" : ""))}, signed(n)); }
+function cfRow(tile, name, sub, amt, onTap, cls){
+  return h("div",{class:"pf-exp pf-cfrow"+(cls ? " "+cls : ""), role: onTap ? "button" : null, tabindex: onTap ? "0" : null,
+      onClick: onTap || null, onKeydown: onTap ? onKey(onTap) : null},
+    tile, h("div",{class:"pf-expmid"}, h("span",{class:"pf-expname"}, name), sub ? h("span",{class:"pf-expcat"}, sub) : null), amt);
+}
+function cfEventRow(e, cf){
+  if (e.kind === "open" && e.forecast)
+    return cfRow(h("span",{class:"pf-ic pf-ic--acc"}, glyphSvg("carry",20,"var(--accent)")), "Brought forward", "Where this month is forecast to finish",
+      h("span",{class:"pf-expamt pf-muted2"}, money2(e.amount)), function(){ openCashflow(0); });
+  if (e.kind === "open"){
+    const prevId = shiftCycleId(cf.C.id, -1), rec = histFor(prevId), lbl = rec ? rec.label : monthLabel(prevId);
+    const sub = !state.carryOver ? "Carry-over is off \u2014 update your balance for a real figure"
+      : cf.owed > 0 ? money2(cf.carry) + " left over, minus " + money2(cf.owed) + " of bank pay arriving today" : "Left over from " + lbl;
+    return cfRow(h("span",{class:"pf-ic pf-ic--acc"}, glyphSvg("carry",20,"var(--accent)")), "Brought forward", sub,
+      h("span",{class:"pf-expamt pf-muted2"}, money2(e.amount)), state.carryOver ? openCarry : null);
+  }
+  if (e.kind === "salary") return cfRow(h("span",{class:"pf-ic pf-ic--pos"}, glyphSvg("note",20,"var(--pos)")), "Salary", "Take-home pay", cfAmt(e.amount), openSalary);
+  if (e.kind === "pay"){
+    const ds = e.shifts.map(function(sh){ return sh.date; }).sort();
+    const span = ds.length === 1 ? "worked " + fmtShort(ds[0]) : "worked " + fmtShort(ds[0]) + " \u2013 " + fmtShort(ds[ds.length-1]);
+    return cfRow(h("span",{class:"pf-ic pf-ic--pos"}, glyphSvg("clock",20,"var(--pos)")), "Bank shift pay",
+      e.shifts.length + " shift" + (e.shifts.length === 1 ? "" : "s") + " \u00B7 " + span, cfAmt(e.amount), e.shifts.length === 1 ? function(){ openShift(e.shifts[0]); } : null);
+  }
+  if (e.kind === "bill"){
+    const c = catOf(e.exp.category);
+    const sub = e.undated ? "No day set yet \u2014 tap to add it" : (e.skip ? "Ticked as paid \u00B7 already in your balance" : e.paid ? "Paid \u00B7 the " + ordinal(e.exp.due) : "Due the " + ordinal(e.exp.due));
+    return cfRow(cfTile(c.glyph, c.color), e.exp.name, sub, cfAmt(e.amount, e.skip ? "pf-muted2" : ""), function(){ openExpense(e.exp); },
+      (e.skip ? "pf-cfrow--skip" : "") + (e.undated ? " pf-cfrow--undated" : ""));
+  }
+  if (e.kind === "spend"){
+    const c = catOf(e.spend.cat);
+    return cfRow(cfTile(c.glyph, c.color, e.planned ? "pf-ic--plan" : ""), e.spend.note || c.label,
+      e.planned ? [h("span",{class:"pf-plantag"}, "Planned"), c.label] : c.label + (e.inBal ? " \u00B7 already in your balance" : ""),
+      cfAmt(e.amount, e.planned ? "pf-cfplanamt" : ""), function(){ openSpend(e.spend, { back: cf.offset }); }, e.planned ? "pf-cfrow--plan" : "");
+  }
+  const sub = e.anchor ? ("The forecast starts here" + (e.delta ? " \u00B7 " + money2(Math.abs(e.delta)) + (e.delta < 0 ? " less" : " more") + " than expected" : ""))
+    : "An earlier check";
+  return cfRow(h("span",{class:"pf-ic pf-ic--acc"}, glyphSvg("landmark",20,"var(--accent)")), "Bank balance", sub,
+    h("span",{class:"pf-expamt"}, money2(e.amount)), function(){ openBalance(e.bal); }, e.anchor ? "pf-cfrow--anchor" : "pf-cfrow--skip");
+}
+function openCashflow(offset){
+  offset = offset > 0 ? 1 : 0;
+  const cf = cashflow(offset), low = cf.lowest, next = !!offset;
+  const seg = h("div",{class:"pf-segctl pf-cfseg", role:"radiogroup", "aria-label":"Which month"});
+  [[0,"This month"],[1,"Next month"]].forEach(function(o){
+    seg.appendChild(h("button",{type:"button", role:"radio", "aria-checked": offset === o[0] ? "true" : "false",
+      onClick:function(){ if (offset !== o[0]) openCashflow(o[0]); }}, o[1]));
+  });
+  const first = cf.days[0];
+  const inOnPayday = first ? first.events.reduce(function(t, e){ return t + ((e.kind === "salary" || e.kind === "pay") ? e.amount : 0); }, 0) : 0;
+  const rows = [];
+  const row = function(lab, val, cls){ rows.push(h("div",{class:"pf-bdrow"}, h("span",{}, lab), h("span",{class: cls || null}, val))); };
+  if (next){
+    row("Starting point \u00B7 forecast for " + fmtShort(isoDate(addDays(parseISO(cf.S), -1))), money2(cf.opening), cf.opening < 0 ? "pf-bdminus" : "");
+    row("Coming in on payday \u00B7 " + fmtShort(cf.S), money2(inOnPayday));
+  } else {
+    if (cf.anchor) row("Starting point \u00B7 your balance on " + fmtShort(cf.anchor.date), money2(cf.anchor.amount));
+    else row("Starting point \u00B7 after payday on " + fmtShort(cf.S), money2(round2(cf.opening + inOnPayday)));
+    row("Today" + (cf.anchor ? "" : " (estimated)"), money2(todayEnd(cf)), todayEnd(cf) < 0 ? "pf-bdminus" : "");
+  }
+  row(next ? "Day-to-day budgets" : "Day-to-day spending left", money2(cf.pot) + (cf.pot > 0 ? " \u00B7 " + money2(cf.perDay) + "/day" : ""));
+  if (cf.planned > 0) row("Planned spends", money2(cf.planned));
+  if (low && low.date !== cf.E) row("Lowest point \u00B7 " + fmtShort(low.date), money2(low.end), low.end < 0 ? "pf-bdminus" : "");
+  const sum = h("div",{class:"pf-bd pf-cfsum"}, rows,
+    h("div",{class:"pf-bdrow pf-bdrow--tot"}, h("span",{}, "Before payday \u00B7 " + fmtShort(cf.E)), h("strong",{class: cf.before < 0 ? "pf-neg" : "pf-pos"}, money2(cf.before))));
+  const list = h("div",{class:"pf-cflist"});
+  cf.days.forEach(function(d){
+    const shown = d.events.filter(function(e){ return !(e.kind === "open" && !e.forecast && !state.carryOver && e.amount === 0); });
+    const noteDay = next ? d.date === cf.S : d.today;
+    if (!shown.length && !d.today) return;
+    list.appendChild(h("div",{class:"pf-cfday" + (d.past ? " pf-cfday--past" : "") + (d.today ? " pf-cfday--today" : "")},
+      h("span",{class:"pf-cfdate"}, fmtDay(d.date), d.today ? h("span",{class:"pf-cftoday"}, "Today") : null),
+      h("span",{class:"pf-cfbal" + (d.end < 0 ? " pf-neg" : "")}, money2(d.end))));
+    shown.forEach(function(e){ list.appendChild(cfEventRow(e, cf)); });
+    if (noteDay && cf.pot > 0) list.appendChild(h("div",{class:"pf-cfnote"}, (next ? "Through the month" : "From today") + ", about " + money2(cf.perDay) + " a day comes off for day-to-day spending."));
+  });
+  const nextTot = round2(cf.before + cf.nextSalary + cf.nextPay);
+  const payNote = h("div",{class:"pf-cfday pf-cfday--payday"}, h("span",{class:"pf-cfdate"}, fmtDay(cf.P), h("span",{class:"pf-cftoday"}, "Payday")), h("span",{class:"pf-cfbal"}, money2(nextTot)));
+  const payRows = h("div",{},
+    cf.nextSalary ? cfRow(h("span",{class:"pf-ic pf-ic--pos"}, glyphSvg("note",20,"var(--pos)")), "Salary", next ? "The pay cycle after" : "Next pay cycle starts", cfAmt(cf.nextSalary), null) : null,
+    cf.nextPay ? cfRow(h("span",{class:"pf-ic pf-ic--pos"}, glyphSvg("clock",20,"var(--pos)")), "Bank shift pay", cf.nextShifts.length + " shift" + (cf.nextShifts.length === 1 ? "" : "s") + " from " + (next ? "that cycle" : "this cycle"), cfAmt(cf.nextPay), null) : null,
+    cf.later ? h("div",{class:"pf-cfnote"}, money2(cf.later) + " more bank pay is due after that.") : null);
+  const rule = h("select",{class:"pf-input", "aria-label":"When bank shift pay arrives"},
+    h("option",{value:"next"}, "On the next payday after the shift"), h("option",{value:"month"}, "On payday in the month after the shift"));
+  rule.value = state.shiftPay;
+  rule.addEventListener("change", function(){ state.shiftPay = rule.value === "month" ? "month" : "next"; commit(); openCashflow(offset); });
+  const btns = next
+    ? h("div",{class:"pf-row2 pf-row2--one"}, h("button",{class:"pf-btn pf-btn--sec", onClick:function(){ openSpend(null, { date: cf.S, back: 1 }); }}, icon("plus",16), " Plan a spend"))
+    : h("div",{class:"pf-row2"},
+        h("button",{class:"pf-btn pf-btn--sec", onClick:function(){ openSpend(null, { back: 0 }); }}, icon("plus",16), " Log spend"),
+        h("button",{class:"pf-btn pf-btn--ghost", onClick:function(){ openBalance(); }}, glyphSvg("landmark",16), " Update balance"));
+  openSheet("Cash flow", h("div",{},
+    seg, h("div",{class:"pf-cfrange"}, fmtDay(cf.S) + " \u2013 " + fmtDay(cf.E)),
+    h("p",{class:"pf-help"}, next
+      ? "Your next pay cycle, starting from where this month is forecast to finish. Plan spends to see how they change it."
+      : "Everything coming in and going out between paydays, and what you'll have each day. Dashed line = forecast. Give a spend a future date to plan it."),
+    sum,
+    h("div",{class:"pf-cfchartwrap"}, cashChart(cf, 340, 130, next ? "cfg-next" : "cfg-sheet")),
+    btns, list, payNote, payRows,
+    h("div",{class:"pf-divlabel"}, "Bank shift pay arrives"),
+    field("When it reaches your account", rule, "You can also set a date on any single shift."),
+    h("p",{class:"pf-mini"}, "Bills without a day are shown on payday. Bit-by-bit budgets (like groceries) are spread over the days left, minus what you've logged or planned. Planned spends count as spent once their day comes.")
+  ));
+}
+function openSpend(existing, opts){
+  opts = opts || {};
+  const today = isoDate(NOW), curBudgets = catBudgets(cyc().id);
+  const recent = state.spends.slice().sort(function(a, b){ return b.at - a.at; })[0];
+  let cat = existing ? existing.cat : (recent ? recent.cat : (Object.keys(curBudgets)[0] || "groceries"));
+  const amt = amtInput(existing ? String(existing.amount) : "");
+  const note = h("input",{class:"pf-input", placeholder:"e.g. Tesco, fuel, lunch", value: existing ? existing.note : ""});
+  const date = h("input",{class:"pf-input", type:"date", "aria-label":"Date", value: existing ? existing.date : (opts.date || today)});
+  const when = h("span",{class:"pf-hint"}), noteLab = h("label",{class:"pf-lab"}, "What was it? (optional)");
+  const info = h("div",{class:"pf-newtotal"});
+  const dayOf = function(){ return /^\d{4}-\d{2}-\d{2}$/.test(date.value) ? date.value : today; };
+  function paintInfo(){
+    const ds = dayOf(), Cx = getCycle(state.payDay || 25, parseISO(ds)), budgets = catBudgets(Cx.id);
+    const a = parseFloat(amt._input.value) || 0, B = budgets[cat] || 0, used = spentIn(cat, Cx, existing ? existing.id : null);
+    const whose = Cx.id === cyc().id ? "" : Cx.id === shiftCycleId(cyc().id, 1) ? "next month's " : "that month's ";
+    info.innerHTML = "";
+    if (B > 0){
+      const left = round2(B - used - a);
+      info.appendChild(h("span",{}, "Comes out of your " + whose, h("strong",{}, money2(B)), " " + catOf(cat).label.toLowerCase() + " budget \u2014 ",
+        h("strong",{class: left < 0 ? "pf-neg" : ""}, left < 0 ? money2(-left) + " over" : money2(left) + " left")));
+    } else info.appendChild(h("span",{}, "No bit-by-bit budget for " + catOf(cat).label.toLowerCase() + ", so this comes off what's left " + (whose ? "that month." : "this cycle.")));
+    noteLab.textContent = ds > today ? "What's it for? (optional)" : "What was it? (optional)";
+    when.textContent = ds > today
+      ? "Planned \u2014 it's in the forecast now, and counts as spent from " + fmtShort(ds) + ". Change or delete it if plans change."
+      : "Pick a later date to plan a spend instead.";
+  }
+  const grid = h("div",{class:"pf-catgrid"});
+  function paint(){
+    grid.innerHTML = "";
+    const order = CAT_ORDER.filter(function(k){ return curBudgets[k]; }).concat(CAT_ORDER.filter(function(k){ return !curBudgets[k]; }));
+    order.forEach(function(k){
+      const c = CAT[k], sel = k === cat;
+      const chip = h("button",{type:"button", class:"pf-catchip"+(sel?" pf-catchip--on":""), onClick:function(){ cat = k; paint(); paintInfo(); }},
+        h("span",{class:"pf-catic", style:{background:tileBg(c.color)}}, glyphSvg(c.glyph,19,c.color)), h("span",{class:"pf-catlab"}, c.label));
+      if (sel){ chip.style.borderColor = c.color; chip.style.background = tint(c.color, 0.10); }
+      grid.appendChild(chip);
+    });
+  }
+  amt._input.addEventListener("input", paintInfo); date.addEventListener("change", paintInfo); date.addEventListener("input", paintInfo);
+  paint(); paintInfo();
+  const after = function(){ if (opts.back != null) openCashflow(opts.back); else closeSheet(); };
+  const act = h("div",{class:"pf-actions"});
+  if (existing) act.appendChild(dangerBtn(function(){ state.spends = state.spends.filter(function(x){ return x.id !== existing.id; }); commit(); after(); toast("Spend removed"); }));
+  act.appendChild(primaryBtn("Save", function(){
+    const a = round2(parseFloat(amt._input.value) || 0);
+    if (!(a > 0) || !/^\d{4}-\d{2}-\d{2}$/.test(date.value)) return;
+    const rec = { id: existing ? existing.id : uid(), date: date.value, amount: a, note: note.value.trim(), cat: cat, at: existing ? existing.at : Date.now() };
+    const i = state.spends.findIndex(function(x){ return x.id === rec.id; });
+    if (i < 0) state.spends.push(rec); else state.spends[i] = rec;
+    commit(); after();
+    toast(rec.date > today ? "Planned " + money2(a) + " for " + fmtShort(rec.date) : (existing ? "Updated " : "Logged ") + money2(a));
+  }));
+  const title = existing ? (existing.date > today ? "Edit planned spend" : "Edit spend") : ((opts.date && opts.date > today) ? "Plan a spend" : "Log spend");
+  openSheet(title, h("div",{}, field("Amount", amt), h("div",{class:"pf-field"}, noteLab, note),
+    h("div",{class:"pf-field"}, h("label",{class:"pf-lab"}, "Date"), date, when), info,
+    h("div",{class:"pf-field", style:{marginTop:"14px"}}, h("label",{class:"pf-lab"}, "Category"), grid), act));
+}
+function openBalance(existing){
+  const cf = cashflow(), todayRow = cf.days.filter(function(d){ return d.today; })[0];
+  const expected = todayRow ? todayRow.end : cf.before;
+  let sign = existing ? (existing.amount < 0 ? -1 : 1) : 1;
+  const mag = existing ? round2(Math.abs(existing.amount)) : 0;
+  const amt = amtInput(existing ? (mag % 1 === 0 ? String(mag) : mag.toFixed(2)) : "");
+  const seg = h("div",{class:"pf-segctl", role:"radiogroup", "aria-label":"In credit or overdrawn"});
+  const box = h("div",{class:"pf-bd"});
+  function val(){ const v = round2(sign * Math.max(0, parseFloat(amt._input.value) || 0)); return v === 0 ? 0 : v; }
+  function paintSeg(){
+    seg.innerHTML = "";
+    [[1,"In credit","pf-segctl--pos"],[-1,"Overdrawn","pf-segctl--neg"]].forEach(function(o){
+      seg.appendChild(h("button",{type:"button", class:o[2], role:"radio", "aria-checked": sign === o[0] ? "true" : "false",
+        onClick:function(){ sign = o[0]; paintSeg(); paintBox(); }}, o[1]));
+    });
+  }
+  function paintBox(){
+    box.innerHTML = "";
+    box.appendChild(h("div",{class:"pf-bdrow"}, h("span",{}, existing ? "Recorded on " + fmtShort(existing.date) : "The app expected today"), h("span",{}, existing ? money2(existing.amount) : money2(expected))));
+    if (!existing && amt._input.value !== ""){
+      const d = round2(val() - expected);
+      box.appendChild(h("div",{class:"pf-bdrow pf-bdrow--tot"}, h("span",{}, d === 0 ? "Spot on" : d > 0 ? "You're ahead by" : "You're behind by"),
+        h("strong",{class: d < 0 ? "pf-neg" : "pf-pos"}, money2(Math.abs(d)))));
+    }
+  }
+  amt._input.addEventListener("input", paintBox); paintSeg(); paintBox();
+  const act = h("div",{class:"pf-actions"});
+  if (existing) act.appendChild(dangerBtn(function(){ state.balances = state.balances.filter(function(b){ return b.id !== existing.id; }); commit(); closeSheet(); toast("Balance check removed"); }));
+  act.appendChild(primaryBtn("Save", function(){
+    if (amt._input.value.trim() === "") return;
+    const v = val();
+    if (existing){ existing.amount = v; } else state.balances.push({ id: uid(), date: isoDate(NOW), amount: v, at: Date.now() });
+    commit(); closeSheet(); toast("Balance set to " + money2(v));
+  }));
+  openSheet(existing ? "Bank balance" : "Update balance", h("div",{},
+    h("p",{class:"pf-help"}, existing ? "The balance you entered. Change it if you mistyped, or remove it."
+      : "What does your bank app show right now? The forecast starts from this, so it stays true to your real account."),
+    seg, field("Balance", amt), box, act));
+}
 
 /* ---------------------------------- themes --------------------------------- */
 function themeId(){ let t = null; try { t = localStorage.getItem(LS_THEME); } catch(e){} return THEMES.some(function(x){ return x.id === t; }) ? t : THEMES[0].id; }
