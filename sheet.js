@@ -92,13 +92,13 @@ function kid(e, k){
 }
 
 /* -------------------------------- state --------------------------------- */
-function blank(){ return { salary:0, currency:"\u00A3", payDay:25, expenses:[], shifts:[], paid:{}, goals:[], history:[], lastCycleId:null, carryOver:true, carryEdits:{}, spends:[], balances:[], shiftPay:"next", updatedAt:0 }; }
+function blank(){ return { salary:0, currency:"\u00A3", payDay:25, expenses:[], shifts:[], paid:{}, goals:[], history:[], lastCycleId:null, carryOver:true, carryEdits:{}, spends:[], incomes:[], balances:[], shiftPay:"next", updatedAt:0 }; }
 const EMOJI_MAP = { "\uD83D\uDEDF":"lifebuoy", "\u2708\uFE0F":"plane", "\uD83C\uDFE0":"home", "\uD83D\uDE97":"car",
   "\uD83C\uDF81":"gift", "\uD83D\uDC8D":"diamond", "\uD83C\uDF93":"cap", "\uD83D\uDCBB":"laptop",
   "\u2764\uFE0F":"heart", "\uD83D\uDC37":"coins", "\uD83D\uDCF1":"phone", "\uD83D\uDECB\uFE0F":"sofa" };
 function normalize(o){
   const s = Object.assign(blank(), o || {});
-  ["expenses","shifts","goals","history","spends","balances"].forEach(function(k){ if (!Array.isArray(s[k])) s[k] = []; });
+  ["expenses","shifts","goals","history","spends","incomes","balances"].forEach(function(k){ if (!Array.isArray(s[k])) s[k] = []; });
   if (!s.paid || typeof s.paid !== "object") s.paid = {};
   if (!s.currency) s.currency = "\u00A3";
   if (!s.payDay) s.payDay = 25;
@@ -122,6 +122,9 @@ function normalize(o){
   s.spends = s.spends.filter(function(x){ return x && isDay(x.date) && Number.isFinite(Number(x.amount)) && Number(x.amount) >= 0; })
     .map(function(x){ return { id: x.id || uid(), date: x.date, amount: round2(Number(x.amount)), note: typeof x.note === "string" ? x.note : "",
       cat: CAT[x.cat] ? x.cat : "other", at: Number.isFinite(Number(x.at)) ? Number(x.at) : 0 }; });
+  s.incomes = s.incomes.filter(function(x){ return x && isDay(x.date) && Number.isFinite(Number(x.amount)) && Number(x.amount) >= 0; })
+    .map(function(x){ return { id: x.id || uid(), date: x.date, amount: round2(Number(x.amount)), note: typeof x.note === "string" ? x.note : "",
+      at: Number.isFinite(Number(x.at)) ? Number(x.at) : 0 }; });
   s.balances = s.balances.filter(function(b){ return b && isDay(b.date) && b.amount !== null && b.amount !== "" && Number.isFinite(Number(b.amount)); })
     .map(function(b){ return { id: b.id || uid(), date: b.date, amount: round2(Number(b.amount)), at: Number.isFinite(Number(b.at)) ? Number(b.at) : 0 }; })
     .sort(function(a, b){ return a.at - b.at; }).slice(-60);
@@ -159,7 +162,7 @@ function carryEdited(id){ const ce = state.carryEdits; const v = (ce && Object.p
   return (typeof v === "number" && Number.isFinite(v)) ? v : null; }
 function carryFor(id){ if (!state.carryOver) return 0; const e = carryEdited(id); return e != null ? e : carryWorkedOut(id); }
 function carriedOver(){ return carryFor(cyc().id); }
-function income(){ return (state.salary||0) + bankTotal() + carriedOver(); }
+function income(){ return (state.salary||0) + bankTotal() + carriedOver() + extraIn(); }
 const NI_THRESH = {
   weekly:      { pt:242,  uel:967,  label:"week" },
   fortnightly: { pt:484,  uel:1934, label:"fortnight" },
@@ -244,6 +247,8 @@ function extraSpend(){
 }
 function remaining(){ return income() - expTotal() - extraSpend(); }
 function whenOf(r){ if (r.date > isoDate(NOW)) return "planned"; return inCycle(r) ? "this cycle" : ""; }
+function incomesIn(C){ const a = isoDate(C.start), z = isoDate(addDays(C.end, -1)); return state.incomes.filter(function(x){ return x.date >= a && x.date <= z && x.amount > 0; }); }
+function extraIn(){ const today = isoDate(NOW); return round2(incomesIn(cyc()).reduce(function(t, x){ return t + (x.date <= today ? x.amount : 0); }, 0)); }
 function pk(id){ return cyc().id + "__" + id; }
 
 function commit(){ state.updatedAt = Date.now(); persistLocal(); pushSoon(); }
@@ -552,6 +557,7 @@ const TABS = [
   { id:"expenses", label:"Expenses",    count:function(){ return state.expenses.length; } },
   { id:"shifts",   label:"Bank shifts", count:function(){ return state.shifts.length; } },
   { id:"spending", label:"Spending",    count:function(){ return state.spends.length; } },
+  { id:"moneyin",  label:"Money in",    count:function(){ return state.incomes.length; } },
   { id:"goals",    label:"Savings goals", count:function(){ return state.goals.length; } },
   { id:"history",  label:"History",     count:function(){ return state.history.length; } },
   { id:"setup",    label:"Setup",       count:null }
@@ -729,6 +735,40 @@ function spendingPanel(){
   }) ];
   return panelCard("Spending", "Day-to-day spends. Anything in a bit-by-bit category (like groceries) comes out of that budget; everything else comes off what's left this cycle. Give a spend a future date to plan it \u2014 it counts once the day comes.",
     acts, buildGrid(spec), "Add spend", function(){ spec.addRow(); });
+}
+
+/* -------------------------------- money in ------------------------------- */
+function moneyInPanel(){
+  const C = cyc();
+  const spec = {
+    data: function(){ return state.incomes.slice().sort(function(x, y){ return x.date < y.date ? 1 : x.date > y.date ? -1 : (y.at||0) - (x.at||0); }); },
+    cols: [
+      { key:"date", label:"Date", type:"date", width:"160px",
+        get:function(r){ return r.date||""; }, set:function(r,v){ if (/^\d{4}-\d{2}-\d{2}$/.test(v)) r.date = v; } },
+      { key:"note", label:"From / what for", type:"text", placeholder:"e.g. Transfer from Sam",
+        get:function(r){ return r.note||""; }, set:function(r,v){ r.note = v; } },
+      { key:"amount", label:"Amount", type:"num", align:"r", width:"140px",
+        get:function(r){ return r.amount != null ? String(r.amount) : ""; }, set:function(r,v){ r.amount = Math.max(0, round2(num(v))); } },
+      { key:"cyc", label:"When", type:"calc", width:"120px",
+        get:function(r){ return whenOf(r); },
+        render: function(r){ const w = whenOf(r); return el("div",{style:{padding:"11px 12px"}}, w ? el("span",{class:"sh-pill " + (w === "planned" ? "sh-pill--manual" : "sh-pill--now")}, w) : el("span",{style:{color:"var(--ink-4)",fontSize:"12.5px"}},"\u2014")); } }
+    ],
+    onDelete: function(r){ state.incomes = state.incomes.filter(function(x){ return x.id !== r.id; }); },
+    addRow: function(silent){ state.incomes.push({ id:uid(), date:isoDate(NOW), amount:0, note:"", at:Date.now() }); if (!silent){ commit(); renderAll(); } },
+    empty: "Nothing yet \u2014 add transfers, refunds or other money coming in. A future date makes it a plan.",
+    foot: function(){
+      const today = isoDate(NOW);
+      const got = round2(incomesIn(C).reduce(function(a, x){ return a + (x.date <= today ? x.amount : 0); }, 0));
+      const plan = round2(state.incomes.reduce(function(a, x){ return a + (x.date > today ? x.amount : 0); }, 0));
+      return [ { text:"Received this cycle", hint:true }, { text:"" }, { node: el("strong",{class:"sh-pos"}, money2(got)), align:"r" },
+        { text: plan > 0 ? money2(plan) + " planned" : "", hint:true } ];
+    }
+  };
+  const acts = [ csvBtn("Export CSV", function(){
+    downloadText("money-in.csv", toCSV(["Date","From / what for","Amount"], state.incomes.map(function(x){ return [x.date, x.note, x.amount]; })));
+  }) ];
+  return panelCard("Money in", "Transfers, refunds and other money coming in (not salary or bank shifts). It counts towards what's left once its date arrives; a future date is a plan that shows in the app's forecast.",
+    acts, buildGrid(spec), "Add money in", function(){ spec.addRow(); });
 }
 
 /* --------------------------------- goals --------------------------------- */
@@ -940,6 +980,7 @@ function setupPanel(){
       stat("Left this cycle", money0(rem), rem>=0 ? "sh-pos" : "sh-neg"),
       stat("Carried in", money0(carriedOver())),
       stat("Spent outside budget", money0(extraSpend())),
+      stat("Other money in", money0(extraIn())),
       stat("Bank shifts (gross)", money2(grossTotal())),
       stat("Bank shifts (take-home)", money2(bankTotal()), "sh-pos")
     )
@@ -1004,6 +1045,7 @@ function renderPanel(){
   p.appendChild(tab === "expenses" ? expensesPanel()
     : tab === "shifts" ? shiftsPanel()
     : tab === "spending" ? spendingPanel()
+    : tab === "moneyin" ? moneyInPanel()
     : tab === "goals" ? goalsPanel()
     : tab === "history" ? historyPanel()
     : setupPanel());
