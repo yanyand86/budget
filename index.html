@@ -563,6 +563,28 @@ select.pf-input { -webkit-appearance: none; appearance: none; cursor: pointer;
 .pf-calbtn:active { transform: scale(.97); }
 .pf-plantag--after { margin: 0 0 0 6px; }
 
+/* plan ahead */
+.pf-aheadrow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.pf-aheadtile { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 11px 10px 10px; border-radius: 14px; border: 1.5px solid var(--line);
+  background: var(--fill-1); font-family: inherit; color: var(--ink); cursor: pointer; text-align: left; min-width: 0; transition: transform .12s ease; }
+.pf-aheadtile:active { transform: scale(.97); }
+.pf-aheadtile--neg { border-color: color-mix(in srgb, var(--neg) 45%, transparent); background: var(--neg-soft); }
+.pf-aheadmon { font-size: 12px; font-weight: 800; color: var(--accent-ink); letter-spacing: .01em; }
+.pf-aheadval { font-size: 19px; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--title); }
+.pf-aheadsub { font-size: 11px; font-weight: 600; color: var(--ink-4); }
+.pf-aheadtags { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 5px; min-height: 16px; }
+.pf-aheadtag { font-size: 10px; font-weight: 750; padding: 1px 6px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-ink); white-space: nowrap; }
+.pf-aheadtag--neg { background: var(--neg-soft); color: var(--neg); }
+.pf-aheadnote { margin: 10px 2px 0; }
+.pf-plan { border: 1.5px solid var(--accent-line); border-radius: 16px; padding: 4px 8px 6px; margin: 0 0 12px; }
+.pf-planhead { font-size: 13px; font-weight: 800; color: var(--title); padding: 10px 6px 4px; }
+.pf-linkbtn { display: block; margin: 4px 0 6px; padding: 8px 2px; border: 0; background: transparent; font-family: inherit; font-size: 13px; font-weight: 700; color: var(--accent); cursor: pointer; }
+.pf-strike { text-decoration: line-through; }
+.pf-cfnote--flat { padding-left: 6px; }
+.pf-cfseg button { font-size: 12.5px; padding-left: 3px; padding-right: 3px; white-space: nowrap; }
+.pf-cfseg { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.pf-segctl--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
 @keyframes pf-fadeup { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
 @keyframes pf-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes pf-up { from { transform: translateY(100%); } to { transform: translateY(0); } }

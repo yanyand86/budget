@@ -92,7 +92,7 @@ function kid(e, k){
 }
 
 /* -------------------------------- state --------------------------------- */
-function blank(){ return { salary:0, currency:"\u00A3", payDay:25, expenses:[], shifts:[], paid:{}, goals:[], history:[], lastCycleId:null, carryOver:true, carryEdits:{}, spends:[], incomes:[], balances:[], shiftPay:"next", updatedAt:0 }; }
+function blank(){ return { salary:0, currency:"\u00A3", payDay:25, expenses:[], shifts:[], paid:{}, goals:[], history:[], lastCycleId:null, carryOver:true, carryEdits:{}, spends:[], incomes:[], balances:[], shiftPay:"next", plans:{}, updatedAt:0 }; }
 const EMOJI_MAP = { "\uD83D\uDEDF":"lifebuoy", "\u2708\uFE0F":"plane", "\uD83C\uDFE0":"home", "\uD83D\uDE97":"car",
   "\uD83C\uDF81":"gift", "\uD83D\uDC8D":"diamond", "\uD83C\uDF93":"cap", "\uD83D\uDCBB":"laptop",
   "\u2764\uFE0F":"heart", "\uD83D\uDC37":"coins", "\uD83D\uDCF1":"phone", "\uD83D\uDECB\uFE0F":"sofa" };
@@ -116,8 +116,30 @@ function normalize(o){
     const d = parseInt(e.due, 10); e.due = (d >= 1 && d <= 31) ? d : null;
     if (typeof e.spread !== "boolean") e.spread = SPREAD_CATS.indexOf(e.category) >= 0;
     if (e.spread) e.due = null;
+    if (!(typeof e.startsOn === "string" && /^\d{4}-\d{2}$/.test(e.startsOn))) e.startsOn = null;
     return e;
   });
+  /* Plan ahead: changes for one pay cycle only - { cycleId: { salary, bills: { expenseId: { amount, due, skip } } } } */
+  const pl = (s.plans && typeof s.plans === "object" && !Array.isArray(s.plans)) ? s.plans : {}, plans = {};
+  Object.keys(pl).forEach(function(cid){
+    const src = pl[cid]; if (!/^\d{4}-\d{2}$/.test(cid) || !src || typeof src !== "object") return;
+    const out = {}, sal = Number(src.salary);
+    if (src.salary != null && src.salary !== "" && Number.isFinite(sal) && sal >= 0) out.salary = round2(sal);
+    if (src.bills && typeof src.bills === "object"){
+      const b = {};
+      Object.keys(src.bills).forEach(function(id){
+        const o = src.bills[id]; if (!o || typeof o !== "object") return;
+        const r = {}, am = Number(o.amount), du = parseInt(o.due, 10);
+        if (o.amount != null && o.amount !== "" && Number.isFinite(am) && am >= 0) r.amount = round2(am);
+        if (du >= 1 && du <= 31) r.due = du;
+        if (o.skip === true) r.skip = true;
+        if (Object.keys(r).length) b[id] = r;
+      });
+      if (Object.keys(b).length) out.bills = b;
+    }
+    if (Object.keys(out).length) plans[cid] = out;
+  });
+  s.plans = plans;
   const isDay = function(v){ return typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v); };
   s.spends = s.spends.filter(function(x){ return x && isDay(x.date) && Number.isFinite(Number(x.amount)) && Number(x.amount) >= 0; })
     .map(function(x){ return { id: x.id || uid(), date: x.date, amount: round2(Number(x.amount)), note: typeof x.note === "string" ? x.note : "",
@@ -162,7 +184,7 @@ function carryEdited(id){ const ce = state.carryEdits; const v = (ce && Object.p
   return (typeof v === "number" && Number.isFinite(v)) ? v : null; }
 function carryFor(id){ if (!state.carryOver) return 0; const e = carryEdited(id); return e != null ? e : carryWorkedOut(id); }
 function carriedOver(){ return carryFor(cyc().id); }
-function income(){ return (state.salary||0) + bankTotal() + carriedOver() + extraIn(); }
+function income(){ return salaryFor(cyc().id) + bankTotal() + carriedOver() + extraIn(); }
 const NI_THRESH = {
   weekly:      { pt:242,  uel:967,  label:"week" },
   fortnightly: { pt:484,  uel:1934, label:"fortnight" },
@@ -225,10 +247,15 @@ function recalcShifts(){
 function applyShift(){ recalcShifts(); }
 function grossTotal(){ return state.shifts.filter(inCycle).reduce(function(a,x){ return a+(x.gross!=null?x.gross:x.amount||0); },0); }
 function monthsBetween(a,b){ const x=a.split("-").map(Number), y=b.split("-").map(Number); return (y[0]*12+(y[1]-1))-(x[0]*12+(x[1]-1)); }
-function expActiveIn(e, cycleId){ return !e.endsOn || e.endsOn >= (cycleId || cyc().id); }
-function activeExpenses(cycleId){ return state.expenses.filter(function(e){ return expActiveIn(e, cycleId); }); }
-function paymentsLeft(e){ if (!e.endsOn) return null; return Math.max(0, monthsBetween(cyc().id, e.endsOn)+1); }
-function expTotal(){ return activeExpenses().reduce(function(a,e){ return a+(e.amount||0); },0); }
+function expActiveIn(e, cycleId){ const c = cycleId || cyc().id; return (!e.endsOn || e.endsOn >= c) && (!e.startsOn || e.startsOn <= c); }
+function planFor(cid){ return (state.plans && state.plans[cid]) || null; }
+function salaryFor(cid){ const p = planFor(cid); return (p && p.salary != null) ? p.salary : (state.salary || 0); }
+function billOv(e, cid){ const p = planFor(cid); return (p && p.bills && p.bills[e.id]) || null; }
+function billAmt(e, cid){ const o = billOv(e, cid); return (o && o.amount != null) ? o.amount : (e.amount || 0); }
+function billSkipped(e, cid){ const o = billOv(e, cid); return !!(o && o.skip); }
+function activeExpenses(cycleId){ const c = cycleId || cyc().id; return state.expenses.filter(function(e){ return expActiveIn(e, c) && !billSkipped(e, c); }); }
+function paymentsLeft(e){ if (!e.endsOn) return null; const c = cyc().id, from = (e.startsOn && e.startsOn > c) ? e.startsOn : c; return Math.max(0, monthsBetween(from, e.endsOn)+1); }
+function expTotal(){ const c = cyc().id; return activeExpenses(c).reduce(function(a,e){ return a + billAmt(e, c); },0); }
 /* ---- cash flow helpers (mirrors the app) ---- */
 const SPREAD_CATS = ["groceries","transport","fuel","dining"];
 function isoDate(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
@@ -237,7 +264,7 @@ function addDays(d, n){ return new Date(d.getFullYear(), d.getMonth(), d.getDate
 function paydayIn(y, m){ return new Date(y, m, state.payDay || 25); }
 function nextPaydayAfter(v){ const d = parseISO(v); let p = paydayIn(d.getFullYear(), d.getMonth()); if (p <= d) p = paydayIn(d.getFullYear(), d.getMonth()+1); return p; }
 function autoPayDate(sh){ const d = parseISO(sh.date); return isoDate(state.shiftPay === "month" ? paydayIn(d.getFullYear(), d.getMonth()+1) : nextPaydayAfter(sh.date)); }
-function catBudgets(cid){ const b = {}; activeExpenses(cid).forEach(function(e){ if (e.spread) b[e.category] = round2((b[e.category]||0) + (e.amount||0)); }); return b; }
+function catBudgets(cid){ const b = {}; activeExpenses(cid).forEach(function(e){ if (e.spread) b[e.category] = round2((b[e.category]||0) + billAmt(e, cid)); }); return b; }
 function spendsIn(C){ const a = isoDate(C.start), z = isoDate(addDays(C.end, -1)); return state.spends.filter(function(x){ return x.date >= a && x.date <= z && x.amount > 0; }); }
 function extraSpend(){
   const C = cyc(), b = catBudgets(C.id), by = {}, today = isoDate(NOW);
@@ -597,6 +624,8 @@ function expensesPanel(){
       { key:"goes", label:"Goes out", type:"select", width:"150px", opts: GOES_OPTS,
         get:function(r){ return r.spread ? "spread" : (r.due ? String(r.due) : ""); },
         set:function(r,v){ if (v === "spread"){ r.spread = true; r.due = null; } else { r.spread = false; const d = parseInt(v,10); r.due = (d >= 1 && d <= 31) ? d : null; } } },
+      { key:"startsOn", label:"Starts", type:"month", width:"150px",
+        get:function(r){ return r.startsOn||""; }, set:function(r,v){ r.startsOn = /^\d{4}-\d{2}$/.test(v) ? v : null; } },
       { key:"endsOn", label:"Ends", type:"month", width:"150px",
         get:function(r){ return r.endsOn||""; }, set:function(r,v){ r.endsOn = v || null; } },
       { key:"left", label:"Left", type:"calc", align:"r", width:"140px",
@@ -609,7 +638,7 @@ function expensesPanel(){
         get:function(r){ return !!state.paid[pk(r.id)]; },
         set:function(r,v){ const k = pk(r.id); if (v) state.paid[k] = true; else delete state.paid[k]; } }
     ],
-    rowClass: function(r){ return (!expActiveIn(r, cyc().id) || state.paid[pk(r.id)]) ? "sh-row--done" : null; },
+    rowClass: function(r){ return ((r.endsOn && r.endsOn < cyc().id) || state.paid[pk(r.id)]) ? "sh-row--done" : null; },
     onDelete: function(r){ state.expenses = state.expenses.filter(function(x){ return x.id !== r.id; }); },
     addRow: function(silent){ state.expenses.push({ id:uid(), name:"", category:"other", amount:0, endsOn:null }); if (!silent){ commit(); renderAll(); } },
     empty: "No expenses yet — add your monthly bills.",
@@ -619,6 +648,7 @@ function expensesPanel(){
       const finN = state.expenses.length - live.length;
       return [ { text: finN ? ("Total \u00B7 " + finN + " finished") : "Total", hint:true }, { text:"" },
         { node: el("strong",{}, money2(expTotal())), align:"r" },
+        { text:"" },
         { text:"" },
         { text:"" },
         { text:"" },
