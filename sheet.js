@@ -253,6 +253,8 @@ function salaryFor(cid){ const p = planFor(cid); return (p && p.salary != null) 
 function billOv(e, cid){ const p = planFor(cid); return (p && p.bills && p.bills[e.id]) || null; }
 function billAmt(e, cid){ const o = billOv(e, cid); return (o && o.amount != null) ? o.amount : (e.amount || 0); }
 function billSkipped(e, cid){ const o = billOv(e, cid); return !!(o && o.skip); }
+function billDueFor(e, cid){ const o = billOv(e, cid); return (o && o.due != null) ? o.due : e.due; }
+function cycleById(id){ const p = id.split("-").map(Number), pd = state.payDay || 25; return { id:id, start:new Date(p[0], p[1]-1, pd), end:new Date(p[0], p[1], pd) }; }
 function activeExpenses(cycleId){ const c = cycleId || cyc().id; return state.expenses.filter(function(e){ return expActiveIn(e, c) && !billSkipped(e, c); }); }
 function paymentsLeft(e){ if (!e.endsOn) return null; const c = cyc().id, from = (e.startsOn && e.startsOn > c) ? e.startsOn : c; return Math.max(0, monthsBetween(from, e.endsOn)+1); }
 function expTotal(){ const c = cyc().id; return activeExpenses(c).reduce(function(a,e){ return a + billAmt(e, c); },0); }
@@ -273,12 +275,85 @@ function extraSpend(){
   return round2(Object.keys(by).reduce(function(t, k){ return t + (b[k] ? Math.max(0, by[k] - b[k]) : by[k]); }, 0));
 }
 function remaining(){ return income() - expTotal() - extraSpend(); }
-function whenOf(r){ if (r.date > isoDate(NOW)) return "planned"; return inCycle(r) ? "this cycle" : ""; }
+function whenOf(r){ if (r.date > isoDate(NOW)) return "planned"; if (inCycle(r)) return "this cycle";
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(r.date)) ? cycleShort(getCycle(state.payDay || 25, parseISO(r.date)).id) : ""; }
 function incomesIn(C){ const a = isoDate(C.start), z = isoDate(addDays(C.end, -1)); return state.incomes.filter(function(x){ return x.date >= a && x.date <= z && x.amount > 0; }); }
 function extraIn(){ const today = isoDate(NOW); return round2(incomesIn(cyc()).reduce(function(t, x){ return t + (x.date <= today ? x.amount : 0); }, 0)); }
 function pk(id){ return cyc().id + "__" + id; }
 
-function commit(){ state.updatedAt = Date.now(); persistLocal(); pushSoon(); }
+/* ------------- Look back: closed months stay in step with what you log later ------------- */
+/* A finished month's record was worked out on payday. If you later add something you forgot for
+   that month (a spend, a shift, money in), the record changes by just that difference, and the
+   change carries on into the months after it - the same way carry-over works. */
+const BACK_MAX = 12;   /* months you can look back over; logged items are kept for about 13 months */
+function nz(v){ v = Number(v); return Number.isFinite(v) ? v : 0; }
+function hashStr(s){ let x = 2166136261; for (let i = 0; i < s.length; i++){ x ^= s.charCodeAt(i); x = Math.imul(x, 16777619) >>> 0; } return ("0000000" + x.toString(16)).slice(-8); }
+function extraWith(spends, budgets){
+  const by = {}; spends.forEach(function(x){ by[x.cat] = (by[x.cat] || 0) + x.amount; });
+  return round2(Object.keys(by).reduce(function(t, k){ return t + (budgets[k] ? Math.max(0, by[k] - budgets[k]) : by[k]); }, 0));
+}
+function monthInputs(cid, budgets){
+  const C = cycleById(cid), a = isoDate(C.start), z = isoDate(addDays(C.end, -1));
+  const inR = function(x){ return !!x && typeof x.date === "string" && x.date >= a && x.date <= z; };
+  const sp = state.spends.filter(function(x){ return inR(x) && x.amount > 0; });
+  const ins = state.incomes.filter(function(x){ return inR(x) && x.amount > 0; });
+  const sh = state.shifts.filter(inR);
+  const key = function(arr, f){ return hashStr(arr.map(f).sort().join(";")); };
+  return { cid: cid,
+    s: key(sp, function(x){ return x.id + "|" + x.date + "|" + x.amount + "|" + x.cat; }),
+    i: key(ins, function(x){ return x.id + "|" + x.date + "|" + x.amount; }),
+    h: key(sh, function(x){ return x.id + "|" + x.date + "|" + (x.gross != null ? x.gross : (x.amount || 0)); }),
+    extra: extraWith(sp, budgets || {}),
+    extraIn: round2(ins.reduce(function(t, x){ return t + x.amount; }, 0)),
+    shifts: round2(sh.reduce(function(t, x){ return t + (x.amount || 0); }, 0)) };
+}
+function snapItems(cid){
+  return activeExpenses(cid).map(function(e){ return { id: e.id, name: e.name, cat: e.category, amount: billAmt(e, cid),
+    due: e.spread ? null : (billDueFor(e, cid) || null), spread: !!e.spread }; });
+}
+function refreshPast(){
+  const cur = getCycle(state.payDay || 25, NOW).id, oldest = shiftCycleId(cur, -BACK_MAX);
+  let changed = false;
+  state.history.filter(function(r){ return !!r && !r.manual && /^\d{4}-\d{2}$/.test(String(r.cycleId)) && r.cycleId < cur && r.cycleId >= oldest; })
+    .sort(function(a, b){ return a.cycleId < b.cycleId ? -1 : 1; })
+    .forEach(function(r){
+      if (!r.budgets || typeof r.budgets !== "object" || Array.isArray(r.budgets)){ r.budgets = catBudgets(r.cycleId); changed = true; }
+      const now = monthInputs(r.cycleId, r.budgets), ref = r.ref;
+      if (!ref || typeof ref !== "object" || ref.cid !== r.cycleId){
+        /* first time this month is seen: remember what its figures came from, and leave them as they are */
+        r.ref = now; changed = true;
+        if (!Array.isArray(r.items)) r.items = snapItems(r.cycleId);
+        if (r.extra == null) r.extra = now.extra;
+        if (r.extraIn == null) r.extraIn = now.extraIn;
+        if (r.shiftsTotal == null) r.shiftsTotal = now.shifts;
+        return;
+      }
+      if (now.s === ref.s && now.i === ref.i && now.h === ref.h) return;
+      let dIn = 0, dOut = 0;
+      if (now.h !== ref.h){ const d = round2(now.shifts - nz(ref.shifts)); r.shiftsTotal = round2(nz(r.shiftsTotal) + d); dIn += d; }
+      if (now.i !== ref.i){ const d = round2(now.extraIn - nz(ref.extraIn)); r.extraIn = round2(nz(r.extraIn) + d); dIn += d; }
+      if (now.s !== ref.s){ const d = round2(now.extra - nz(ref.extra)); r.extra = round2(nz(r.extra) + d); dOut += d; }
+      r.ref = now; changed = true;
+      r.income = round2(nz(r.income) + dIn); r.expenses = round2(nz(r.expenses) + dOut);
+      const ds = round2(dIn - dOut); r.saved = round2(nz(r.saved) + ds);
+      if (ds) carryForward(r.cycleId, ds);
+    });
+  return changed;
+}
+function carryForward(fromId, ds){
+  if (!state.carryOver) return;
+  for (let id = shiftCycleId(fromId, 1), n = 0; n < 240; id = shiftCycleId(id, 1), n++){
+    if (carryEdited(id) != null) return;                 /* you set that month's carry-over yourself */
+    const r = histFor(id); if (!r || r.manual) return;   /* this month reads it live */
+    r.carriedIn = round2(nz(r.carriedIn) + ds); r.income = round2(nz(r.income) + ds); r.saved = round2(nz(r.saved) + ds);
+  }
+}
+function cycleShort(cid){
+  const C = cycleById(cid), a = C.start.toLocaleDateString("en-GB",{month:"short"}), b = addDays(C.end, -1).toLocaleDateString("en-GB",{month:"short"});
+  return a === b ? a : a + "–" + b;
+}
+
+function commit(){ refreshPast(); state.updatedAt = Date.now(); persistLocal(); pushSoon(); }
 
 /* -------------------------------- themes -------------------------------- */
 function themeId(){ let t = null; try { t = localStorage.getItem(LS_THEME); } catch(e){} return THEMES.some(function(x){ return x.id === t; }) ? t : THEMES[0].id; }
@@ -372,7 +447,7 @@ function syncPull(adopt){
   return DRIVE.pull().then(function(remote){
     if (remote){
       const r = remote.updatedAt || 0, l = state.updatedAt || 0;
-      if (adopt && r > l){ state = normalize(remote); persistLocal(); renderAll(); return "adopted"; }
+      if (adopt && r > l){ state = normalize(remote); refreshPast(); persistLocal(); renderAll(); return "adopted"; }
       if (l > r) return DRIVE.push(state).then(function(){ return "pushed"; });
       return "same";
     }
@@ -404,7 +479,7 @@ function reloadFromDrive(){
   return DRIVE.requestToken(false).catch(function(){ return DRIVE.requestToken(true); })
     .then(function(){ return DRIVE.pull(); })
     .then(function(remote){
-      if (remote){ state = normalize(remote); persistLocal(); renderAll(); toast("Loaded latest from Drive"); }
+      if (remote){ state = normalize(remote); refreshPast(); persistLocal(); renderAll(); toast("Loaded latest from Drive"); }
       else toast("Nothing saved in Drive yet");
       sync.last = Date.now(); setSync("ok");
     })
@@ -745,7 +820,8 @@ function spendingPanel(){
         get:function(r){ return r.amount != null ? String(r.amount) : ""; }, set:function(r,v){ r.amount = Math.max(0, round2(num(v))); } },
       { key:"cyc", label:"When", type:"calc", width:"120px",
         get:function(r){ return whenOf(r); },
-        render: function(r){ const w = whenOf(r); return el("div",{style:{padding:"11px 12px"}}, w ? el("span",{class:"sh-pill " + (w === "planned" ? "sh-pill--manual" : "sh-pill--now")}, w) : el("span",{style:{color:"var(--ink-4)",fontSize:"12.5px"}},"\u2014")); } }
+        render: function(r){ const w = whenOf(r); return el("div",{style:{padding:"11px 12px"}}, (w === "planned" || w === "this cycle") ? el("span",{class:"sh-pill " + (w === "planned" ? "sh-pill--manual" : "sh-pill--now")}, w)
+          : el("span",{style:{color: w ? "var(--ink-3)" : "var(--ink-4)", fontSize:"12.5px", fontWeight: w ? "650" : "400"}}, w || "\u2014")); } }
     ],
     onDelete: function(r){ state.spends = state.spends.filter(function(x){ return x.id !== r.id; }); },
     addRow: function(silent){ state.spends.push({ id:uid(), date:isoDate(NOW), amount:0, note:"", cat:"groceries", at:Date.now() }); if (!silent){ commit(); renderAll(); } },
@@ -781,7 +857,8 @@ function moneyInPanel(){
         get:function(r){ return r.amount != null ? String(r.amount) : ""; }, set:function(r,v){ r.amount = Math.max(0, round2(num(v))); } },
       { key:"cyc", label:"When", type:"calc", width:"120px",
         get:function(r){ return whenOf(r); },
-        render: function(r){ const w = whenOf(r); return el("div",{style:{padding:"11px 12px"}}, w ? el("span",{class:"sh-pill " + (w === "planned" ? "sh-pill--manual" : "sh-pill--now")}, w) : el("span",{style:{color:"var(--ink-4)",fontSize:"12.5px"}},"\u2014")); } }
+        render: function(r){ const w = whenOf(r); return el("div",{style:{padding:"11px 12px"}}, (w === "planned" || w === "this cycle") ? el("span",{class:"sh-pill " + (w === "planned" ? "sh-pill--manual" : "sh-pill--now")}, w)
+          : el("span",{style:{color: w ? "var(--ink-3)" : "var(--ink-4)", fontSize:"12.5px", fontWeight: w ? "650" : "400"}}, w || "\u2014")); } }
     ],
     onDelete: function(r){ state.incomes = state.incomes.filter(function(x){ return x.id !== r.id; }); },
     addRow: function(silent){ state.incomes.push({ id:uid(), date:isoDate(NOW), amount:0, note:"", at:Date.now() }); if (!silent){ commit(); renderAll(); } },
@@ -1087,6 +1164,7 @@ function renderAll(){ renderCycleLabel(); renderSyncBar(); renderTabs(); renderP
 function boot(){
   applyTheme(themeId());
   state = loadLocal();
+  if (refreshPast()) persistLocal();
   renderAll();
   renderThemePicker();
   /* the app view changed the theme in another tab on this device */
