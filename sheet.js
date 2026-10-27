@@ -1,5 +1,5 @@
 "use strict";
-/* Sheet view — same data, same Drive file, same origin as the app. */
+/* Sheet view \u2014 same data, same Drive file, same origin as the app. */
 
 const GOOGLE_CLIENT_ID = "";
 const LS_KEY = "nhs-budget-standalone:v1";
@@ -161,6 +161,8 @@ function normalize(o){
   s.goals = s.goals.map(function(g){
     if (!g.glyph) g.glyph = (g.emoji && EMOJI_MAP[g.emoji]) ? EMOJI_MAP[g.emoji] : "target";
     if (GOAL_COLORS.indexOf(g.color) < 0) g.color = GOAL_COLORS[0];
+    /* the day you start saving and the day you need the money (older versions kept just a month) */
+    g.startDate = asDay(g.startDate); g.targetDate = asDay(g.targetDate);
     return g;
   });
   return s;
@@ -350,8 +352,29 @@ function carryForward(fromId, ds){
 }
 function cycleShort(cid){
   const C = cycleById(cid), a = C.start.toLocaleDateString("en-GB",{month:"short"}), b = addDays(C.end, -1).toLocaleDateString("en-GB",{month:"short"});
-  return a === b ? a : a + "–" + b;
+  return a === b ? a : a + "\u2013" + b;
 }
+
+/* --------------------------- savings goal timing --------------------------- */
+/* A goal can have a start date (when you begin putting money aside) and an end date (when you
+   need the money). You save over the pay cycles from the one the start falls in - or this one,
+   once it has begun - to the one the end date falls in, so each month needs what's left divided
+   by the months left. */
+function asDay(v){ if (typeof v !== "string") return null; if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v; if (/^\d{4}-\d{2}$/.test(v)) return v + "-01"; return null; }
+function goalPlan(g){
+  const pd = state.payDay || 25, cur = cyc().id, today = isoDate(NOW);
+  const start = asDay(g.startDate), end = asDay(g.targetDate);
+  const target = nz(g.target), saved = nz(g.saved), left = round2(Math.max(0, target - saved));
+  const startC = start ? getCycle(pd, parseISO(start)).id : null, endC = end ? getCycle(pd, parseISO(end)).id : null;
+  const reached = target > 0 && saved >= target, invalid = !!start && !!end && start > end;
+  const notYet = !!startC && startC > cur, over = !!end && end < today;
+  const from = notYet ? startC : cur;
+  const months = (endC && !over && !invalid && endC >= from) ? monthsBetween(from, endC) + 1 : null;
+  const per = (months && left > 0 && !reached) ? round2(left / months) : 0;
+  return { start: start, end: end, startC: startC, endC: endC, left: left, reached: reached, invalid: invalid, notYet: notYet, over: over, months: months, per: per };
+}
+/* does this goal need money from that pay cycle's pay? */
+function goalActiveIn(gp, cid){ return gp.per > 0 && !!gp.endC && cid >= cyc().id && cid <= gp.endC && (!gp.startC || cid >= gp.startC); }
 
 function commit(){ refreshPast(); state.updatedAt = Date.now(); persistLocal(); pushSoon(); }
 
@@ -716,7 +739,7 @@ function expensesPanel(){
     rowClass: function(r){ return ((r.endsOn && r.endsOn < cyc().id) || state.paid[pk(r.id)]) ? "sh-row--done" : null; },
     onDelete: function(r){ state.expenses = state.expenses.filter(function(x){ return x.id !== r.id; }); },
     addRow: function(silent){ state.expenses.push({ id:uid(), name:"", category:"other", amount:0, endsOn:null }); if (!silent){ commit(); renderAll(); } },
-    empty: "No expenses yet — add your monthly bills.",
+    empty: "No expenses yet \u2014 add your monthly bills.",
     foot: function(){
       const live = activeExpenses();
       const paidN = live.filter(function(e){ return state.paid[pk(e.id)]; }).length;
@@ -896,8 +919,12 @@ function goalsPanel(){
       { key:"saved", label:"Saved", type:"num", align:"r", width:"130px",
         get:function(r){ return r.saved != null ? String(r.saved) : ""; },
         set:function(r,v){ r.saved = Math.max(0, round2(num(v))); } },
-      { key:"targetDate", label:"By", type:"month", width:"150px",
-        get:function(r){ return r.targetDate||""; }, set:function(r,v){ r.targetDate = v || null; } },
+      { key:"startDate", label:"Start saving", type:"date", width:"160px",
+        get:function(r){ return r.startDate||""; }, set:function(r,v){ r.startDate = asDay(v); } },
+      { key:"targetDate", label:"Needed by", type:"date", width:"160px",
+        get:function(r){ return r.targetDate||""; }, set:function(r,v){ r.targetDate = asDay(v); } },
+      { key:"per", label:"A month", type:"calc", align:"r", width:"120px",
+        get:function(r){ const gp = goalPlan(r); return gp.invalid ? "start > end" : gp.per ? money0(gp.per) : "\u2014"; } },
       { key:"pct", label:"Progress", type:"calc", align:"r", width:"110px",
         get:function(r){ return (r.target>0 ? Math.round(clamp(r.saved/r.target,0,1)*100) : 0) + "%"; } }
     ],
@@ -909,15 +936,15 @@ function goalsPanel(){
       const s = state.goals.reduce(function(a,g){ return a+(g.saved||0); },0);
       return [ { text:"Totals", hint:true }, { text:"" }, { text:"" },
         { node: el("strong",{}, money2(t)), align:"r" },
-        { node: el("strong",{class:"sh-pos"}, money2(s)), align:"r" }, { text:"" },
+        { node: el("strong",{class:"sh-pos"}, money2(s)), align:"r" }, { text:"" }, { text:"" }, { text:"" },
         { text: (t>0 ? Math.round(s/t*100) : 0) + "%", align:"r" } ];
     }
   };
   const acts = [ csvBtn("Export CSV", function(){
-    downloadText("savings-goals.csv", toCSV(["Goal","Target","Saved","By"],
-      state.goals.map(function(g){ return [g.name, g.target, g.saved, g.targetDate||""]; })));
+    downloadText("savings-goals.csv", toCSV(["Goal","Target","Saved","Start saving","Needed by"],
+      state.goals.map(function(g){ return [g.name, g.target, g.saved, g.startDate||"", g.targetDate||""]; })));
   }) ];
-  return panelCard("Savings goals", "Editing \u201CSaved\u201D here sets the total directly \u2014 the phone app's + button adds to it.",
+  return panelCard("Savings goals", "Editing \u201CSaved\u201D here sets the total directly \u2014 the phone app's + button adds to it. Add a start and a needed-by date to see what each month takes.",
     acts, buildGrid(spec), "Add goal", function(){ spec.addRow(); });
 }
 

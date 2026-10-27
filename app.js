@@ -109,6 +109,8 @@ const GLYPH = {
     f:'<rect x="2.6" y="6.2" width="18.8" height="11.6" rx="2.4"/>' },
   clock:{ s:'<circle cx="12" cy="12" r="8.6"/><path d="M12 7.3V12l3.2 2.1"/>',
     f:'<circle cx="12" cy="12" r="8.6"/>' },
+  calendar:{ s:'<rect x="3.2" y="4.8" width="17.6" height="15.6" rx="2.8"/><path d="M3.2 9.8h17.6M8 3v3.6M16 3v3.6"/><path d="M7.6 13.6h2M11 13.6h2M14.4 13.6h2M7.6 16.9h2M11 16.9h2"/>',
+    f:'<path d="M6 4.8h12a2.8 2.8 0 0 1 2.8 2.8v2.2H3.2V7.6A2.8 2.8 0 0 1 6 4.8z"/>' },
   carry:{ s:'<path d="M4.4 12.4a7.6 7.6 0 0 1 12.9-5.2"/><path d="M18.2 3.2l-.6 4.3-4.3-.5"/><ellipse cx="12" cy="16.9" rx="6.2" ry="2.4"/><path d="M5.8 16.9v1.6c0 1.3 2.8 2.4 6.2 2.4s6.2-1.1 6.2-2.4v-1.6"/>',
     f:'<path d="M5.8 16.9v1.6c0 1.3 2.8 2.4 6.2 2.4s6.2-1.1 6.2-2.4v-1.6c0-1.3-2.8-2.4-6.2-2.4s-6.2 1.1-6.2 2.4z"/>' }
 };
@@ -191,7 +193,7 @@ function svgEl(tag, props){
 function icon(name, size){ size = size || 18; const s = document.createElement("span"); s.style.display="inline-flex"; s.style.width=size+"px"; s.style.height=size+"px"; s.style.flex="0 0 auto"; s.innerHTML = (SVG[name]||"").replace("<svg ", '<svg width="100%" height="100%" '); return s; }
 
 /* --------------------------------- state ----------------------------------- */
-const SEED_BY = (function(){ const d = new Date(); d.setMonth(d.getMonth()+8); return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0"); })();
+const SEED_BY = (function(){ const d = new Date(); d.setMonth(d.getMonth()+8); return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-01"; })();
 function makeDefaults(){
   return {
     salary: 2400, currency: "\u00A3", payDay: 25,
@@ -288,6 +290,8 @@ function normalize(o){
   s.goals = s.goals.map(function(g){
     if (!g.glyph) g.glyph = (g.emoji && EMOJI_MAP[g.emoji]) ? EMOJI_MAP[g.emoji] : "target";
     if (GOAL_COLORS.indexOf(g.color) < 0) g.color = GOAL_COLORS[0];
+    /* the day you start saving and the day you need the money (older versions kept just a month) */
+    g.startDate = asDay(g.startDate); g.targetDate = asDay(g.targetDate);
     return g;
   });
   return s;
@@ -661,18 +665,10 @@ function renderApp(){
   goalsCard.appendChild(cardHead("Savings goals", money2(state.goals.reduce(function(a,g){ return a+(g.saved||0); },0)), "pf-pos"));
   const goalsWrap = h("div",{class:"pf-goals"});
   if (state.goals.length){
+    const sumBox = goalsSummary(); if (sumBox) goalsWrap.appendChild(sumBox);
     state.goals.forEach(function(g){
       const pct = g.target>0 ? clamp(g.saved/g.target,0,1) : 0;
-      const left = Math.max(0,(g.target||0)-(g.saved||0));
-      let hint = null;
-      if (pct>=1) hint = {txt:"Reached \u2014 nice one", tone:"ok"};
-      else if (g.targetDate){
-        const tp = g.targetDate.split("-").map(Number); const Y=tp[0], M=tp[1];
-        const monthsLeft = (Y*12+(M-1)) - (NOW.getFullYear()*12+NOW.getMonth());
-        const byLabel = new Date(Y,M-1,1).toLocaleDateString("en-GB",{month:"short",year:"numeric"});
-        if (monthsLeft<=0) hint = {txt: money0(left)+" to go \u00B7 due "+byLabel, tone:"warn"};
-        else { const per = left/monthsLeft; const tone = monthlySavings()>0 ? (monthlySavings()>=per?"ok":"warn") : "plain"; hint = {txt: money0(per)+"/mo to reach by "+byLabel, tone:tone}; }
-      }
+      const gp = goalPlan(g), hint = goalHint(g, gp), when = goalDates(g, gp);
       const fill = h("div",{class:"pf-goalfill", style:{background:g.color}}); growW(fill, pct);
       const row = h("div",{class:"pf-goalrow", role:"button", tabindex:"0", onClick:function(){ openGoal(g); }, onKeydown:onKey(function(){ openGoal(g); })},
         h("span",{class:"pf-goalemoji", style:{background:tileBg(g.color)}}, glyphSvg(g.glyph,22,g.color)),
@@ -683,9 +679,10 @@ function renderApp(){
           ),
           h("div",{class:"pf-goalbar"}, fill),
           h("div",{class:"pf-goalmeta"},
-            h("span",{class:"pf-goalhint"+(hint&&hint.tone==="ok"?" pf-goalhint--ok":hint&&hint.tone==="warn"?" pf-goalhint--warn":"")}, hint?hint.txt:money0(left)+" to go"),
+            h("span",{class:"pf-goalhint"+(hint.tone==="ok"?" pf-goalhint--ok":hint.tone==="warn"?" pf-goalhint--warn":"")}, hint.txt),
             h("span",{class:"pf-goalpct"}, Math.round(pct*100)+"%")
-          )
+          ),
+          when
         )
       );
       goalsWrap.appendChild(h("div",{class:"pf-goal"}, row,
@@ -1021,29 +1018,53 @@ function openShift(existing, opts){
   ));
 }
 
-function openGoal(existing){
+function openGoal(existing, opts){
+  opts = opts || {};
+  const done = function(){ if (opts.onDone) opts.onDone(); else closeSheet(); };
   let glyph = existing?existing.glyph:"target";
   let color = existing?existing.color:GOAL_COLORS[0];
   const name = h("input",{class:"pf-input", placeholder:"e.g. Emergency fund", value: existing?existing.name:""});
   const target = amtInput(existing?existing.target:"");
   const saved = amtInput((existing&&existing.saved!=null)?existing.saved:"");
-  const by = h("input",{class:"pf-input", type:"month", value: (existing&&existing.targetDate)?existing.targetDate:""});
+  const startIn = h("input",{class:"pf-input", type:"date", "aria-label":"Start saving", value: (existing && asDay(existing.startDate)) || opts.startDate || ""});
+  const by = h("input",{class:"pf-input", type:"date", "aria-label":"Needed by", value: (existing && asDay(existing.targetDate)) || ""});
+  const plan = h("div",{class:"pf-newtotal pf-goalplan"});
+  function paintPlan(){
+    const t = parseFloat(target._input.value) || 0, sv = parseFloat(saved._input.value) || 0;
+    const gp = goalPlan({ target: t, saved: sv, startDate: startIn.value || null, targetDate: by.value || null });
+    plan.innerHTML = ""; plan.className = "pf-newtotal pf-goalplan" + (gp.invalid ? " pf-goalplan--bad" : "");
+    plan.appendChild(h("span",{}, gp.invalid ? "The start date needs to be on or before the end date."
+      : gp.reached ? "Already reached \u2014 nice one."
+      : gp.over ? "That end date has passed. Pick a new one to see how much a month."
+      : gp.per ? [(gp.notYet ? "From " + fmtDateY(gp.start) + ": " : "From now: "), h("strong",{}, money0(gp.per) + " a month"),
+          " for " + gp.months + (gp.months === 1 ? " month" : " months") + ", to have " + money0(t) + " by " + fmtDateY(gp.end) + "."]
+      : gp.start && !gp.end ? "Starts " + fmtDateY(gp.start) + ". Add an end date to see how much to put aside each month."
+      : "Add a start and an end date to see when to begin saving and how much each month takes."));
+  }
+  [startIn, by].forEach(function(x){ x.addEventListener("change", paintPlan); x.addEventListener("input", paintPlan); });
+  target._input.addEventListener("input", paintPlan); saved._input.addEventListener("input", paintPlan);
   const egrid = h("div",{class:"pf-emojigrid"});
   const crow = h("div",{class:"pf-colorrow"});
   function paintE(){ egrid.innerHTML=""; GOAL_GLYPHS.forEach(function(e){ const sel=e===glyph; const b=h("button",{type:"button", class:"pf-emoji"+(sel?" pf-emoji--on":""), onClick:function(){ glyph=e; paintE(); }}, glyphSvg(e,21,sel?color:"var(--ink-3)")); if (sel){ b.style.borderColor=color; b.style.background=tint(color,0.12); } egrid.appendChild(b); }); }
   function paintC(){ crow.innerHTML=""; GOAL_COLORS.forEach(function(c){ const sel=c===color; const b=h("button",{type:"button", class:"pf-swatch"+(sel?" pf-swatch--on":""), style:{background:c}, "aria-label":"Pick colour", onClick:function(){ color=c; paintE(); paintC(); }}); crow.appendChild(b); }); }
   paintE(); paintC();
   const act = h("div",{class:"pf-actions"});
-  if (existing) act.appendChild(dangerBtn(function(){ delGoal(existing.id); closeSheet(); }));
+  if (existing) act.appendChild(dangerBtn(function(){ delGoal(existing.id); done(); }));
   act.appendChild(primaryBtn("Save", function(){
     const nm = name.value.trim(); const t = parseFloat(target._input.value); if (!nm || !(t>0)) return;
-    upsertGoal({ id: existing?existing.id:uid(), glyph:glyph, name:nm, color:color, target:Math.max(0,t||0), saved:Math.max(0,parseFloat(saved._input.value)||0), targetDate:by.value||null }); closeSheet();
+    const sd = asDay(startIn.value), ed = asDay(by.value);
+    if (sd && ed && sd > ed){ paintPlan(); return; }
+    upsertGoal(Object.assign({}, existing || {}, { id: existing?existing.id:uid(), glyph:glyph, name:nm, color:color, target:Math.max(0,t||0),
+      saved:Math.max(0,parseFloat(saved._input.value)||0), startDate: sd, targetDate: ed })); done();
   }));
+  paintPlan();
   openSheet(existing?"Edit goal":"New savings goal", h("div",{},
     field("Icon", egrid),
     field("Goal name", name),
     h("div",{class:"pf-grid2"}, field("Target", target), field("Saved so far", saved)),
-    field("Target date (optional)", by, "Add a date and we'll show how much to set aside each month."),
+    h("div",{class:"pf-grid2"}, field("Start saving", startIn), field("Needed by", by)),
+    h("p",{class:"pf-hint pf-goaldatehint"}, "Both optional. Start is when you begin putting money aside; needed by is when you'll use it."),
+    plan,
     field("Colour", crow),
     act
   ));
@@ -1063,6 +1084,9 @@ function openContrib(goal){
   const quick = h("div",{class:"pf-quickrow"});
   [50,100,200].forEach(function(q){ quick.appendChild(h("button",{type:"button", class:"pf-quick", onClick:function(){ amt._input.value=String(round2((parseFloat(amt._input.value)||0)+q)); upd(); }}, "+"+CUR()+q)); });
   quick.appendChild(h("button",{type:"button", class:"pf-quick", onClick:function(){ amt._input.value=""; upd(); }}, "Clear"));
+  const gp = goalPlan(goal);
+  if (goalActiveIn(gp, cyc().id)) quick.insertBefore(h("button",{type:"button", class:"pf-quick pf-quick--plan",
+    onClick:function(){ amt._input.value = String(gp.per); upd(); }}, "+" + money0(gp.per) + " this month"), quick.firstChild);
   const help = h("p",{class:"pf-help"}); help.appendChild(document.createTextNode("Adding to ")); help.appendChild(h("strong",{}, goal.name)); help.appendChild(document.createTextNode(" \u2014 currently "+CUR()+Math.round(goal.saved||0).toLocaleString("en-GB")+" of "+CUR()+Math.round(goal.target||0).toLocaleString("en-GB")+"."));
   const fAmt = field("Amount to add", amt); fAmt.appendChild(quick);
   openSheet("Add to savings", h("div",{}, help, fAmt, preview, actions(primaryBtn("Add to savings", function(){ const a=round2(parseFloat(amt._input.value)||0); if (!(a>0)) return; addContribution(goal.id, a); closeSheet(); }))));
@@ -1192,8 +1216,29 @@ function carryForward(fromId, ds){
 }
 function cycleShort(cid){
   const C = cycleById(cid), a = C.start.toLocaleDateString("en-GB",{month:"short"}), b = addDays(C.end, -1).toLocaleDateString("en-GB",{month:"short"});
-  return a === b ? a : a + "–" + b;
+  return a === b ? a : a + "\u2013" + b;
 }
+
+/* --------------------------- savings goal timing --------------------------- */
+/* A goal can have a start date (when you begin putting money aside) and an end date (when you
+   need the money). You save over the pay cycles from the one the start falls in - or this one,
+   once it has begun - to the one the end date falls in, so each month needs what's left divided
+   by the months left. */
+function asDay(v){ if (typeof v !== "string") return null; if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v; if (/^\d{4}-\d{2}$/.test(v)) return v + "-01"; return null; }
+function goalPlan(g){
+  const pd = state.payDay || 25, cur = cyc().id, today = isoDate(NOW);
+  const start = asDay(g.startDate), end = asDay(g.targetDate);
+  const target = nz(g.target), saved = nz(g.saved), left = round2(Math.max(0, target - saved));
+  const startC = start ? getCycle(pd, parseISO(start)).id : null, endC = end ? getCycle(pd, parseISO(end)).id : null;
+  const reached = target > 0 && saved >= target, invalid = !!start && !!end && start > end;
+  const notYet = !!startC && startC > cur, over = !!end && end < today;
+  const from = notYet ? startC : cur;
+  const months = (endC && !over && !invalid && endC >= from) ? monthsBetween(from, endC) + 1 : null;
+  const per = (months && left > 0 && !reached) ? round2(left / months) : 0;
+  return { start: start, end: end, startC: startC, endC: endC, left: left, reached: reached, invalid: invalid, notYet: notYet, over: over, months: months, per: per };
+}
+/* does this goal need money from that pay cycle's pay? */
+function goalActiveIn(gp, cid){ return gp.per > 0 && !!gp.endC && cid >= cyc().id && cid <= gp.endC && (!gp.startC || cid >= gp.startC); }
 
 /* -------------------------------- cash flow -------------------------------- */
 /* categories usually spent bit by bit: new expenses in these start "spread over the cycle" */
@@ -1777,6 +1822,85 @@ function openBalance(existing, opts){
     seg, field("Balance", amt), dateIn ? field("Day", dateIn) : null, box, act));
 }
 
+/* ------------------------------- goal timing UI ------------------------------- */
+function fmtDateY(v){ const d = parseISO(v); return d.toLocaleDateString("en-GB",{day:"numeric", month:"short"}) + (d.getFullYear() !== NOW.getFullYear() ? " " + d.getFullYear() : ""); }
+function relTime(v){
+  const d = dayDiff(new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate()), parseISO(v));
+  return d <= 0 ? "today" : d === 1 ? "1 day" : d < 14 ? d + " days" : d < 61 ? Math.round(d / 7) + " weeks" : Math.round(d / 30.44) + " months";
+}
+function goalHint(g, gp){
+  if (gp.reached) return { txt: "Reached \u2014 nice one", tone: "ok" };
+  if (gp.invalid) return { txt: "Start date is after the end date", tone: "warn" };
+  if (gp.over) return { txt: money0(gp.left) + " short \u00B7 needed " + fmtDateY(gp.end), tone: "warn" };
+  if (gp.notYet) return { txt: gp.per ? money0(gp.per) + " a month from " + parseISO(gp.start).toLocaleDateString("en-GB",{month:"short"}) : "Not started yet", tone: "plain" };
+  if (gp.per) return { txt: money0(gp.per) + " a month \u00B7 " + gp.months + (gp.months === 1 ? " month" : " months") + " left", tone: "plain" };
+  return { txt: money0(gp.left) + " to go", tone: "plain" };
+}
+function goalDates(g, gp){
+  if (!gp.start && !gp.end) return null;
+  /* "25 Jan \u2192 12 Jul 2027": the year once, at the end, unless the two dates fall in different years */
+  const sameYr = gp.start && gp.end && gp.start.slice(0, 4) === gp.end.slice(0, 4);
+  const txt = gp.start && gp.end ? (sameYr ? fmtShort(gp.start) : fmtDateY(gp.start)) + " \u2192 " + fmtDateY(gp.end) : gp.start ? "From " + fmtDateY(gp.start) : "Needed by " + fmtDateY(gp.end);
+  const chip = gp.reached ? null : gp.invalid ? null : gp.notYet ? ["starts in " + relTime(gp.start), "soon"]
+    : gp.over ? ["date passed", "past"] : gp.end ? [gp.end === isoDate(NOW) ? "needed today" : "needed in " + relTime(gp.end), ""] : ["saving now", ""];
+  return h("div",{class:"pf-goaldates"}, glyphSvg("calendar", 13, "var(--ink-4)"), h("span",{}, txt),
+    chip ? h("span",{class:"pf-goalchip" + (chip[1] ? " pf-goalchip--" + chip[1] : "")}, chip[0]) : null);
+}
+/* top of the goals card: what to put aside this month, and the next goal to start */
+function goalsSummary(){
+  const cur = cyc().id, plans = state.goals.map(function(g){ return { g: g, gp: goalPlan(g) }; });
+  const now = plans.filter(function(x){ return goalActiveIn(x.gp, cur); });
+  const need = round2(now.reduce(function(t, x){ return t + x.gp.per; }, 0));
+  const next = plans.filter(function(x){ return x.gp.notYet && !x.gp.reached; }).sort(function(a, b){ return a.gp.start < b.gp.start ? -1 : 1; })[0];
+  if (!need && !next) return null;
+  const sb = monthlySavings(), box = h("div",{class:"pf-goalsum"});
+  if (need){
+    box.appendChild(h("div",{class:"pf-goalsumrow"}, h("span",{}, "Put aside this month"), h("strong",{}, money0(need))));
+    box.appendChild(h("div",{class:"pf-goalsumsub"}, "For " + now.map(function(x){ return x.g.name; }).join(", ") +
+      (sb > 0 ? (sb >= need ? " \u00B7 your " + money0(sb) + " Savings bill covers it" : "") : "")));
+    if (sb > 0 && sb < need) box.appendChild(h("div",{class:"pf-goalsumsub pf-goalsumsub--warn"}, money0(need - sb) + " more than your " + money0(sb) + " Savings bill"));
+  }
+  if (next) box.appendChild(h("div",{class:"pf-goalsumsub pf-goalsumnext"}, "Next: " + next.g.name + " starts " + fmtDateY(next.gp.start) +
+    (next.gp.per ? " (" + money0(next.gp.per) + " a month)" : "") + " \u00B7 in " + relTime(next.gp.start)));
+  return box;
+}
+function goalStartTag(cid){
+  const st = state.goals.filter(function(g){ const gp = goalPlan(g); return gp.startC === cid && !gp.reached; });
+  if (!st.length) return null;
+  return h("span",{class:"pf-aheadtag pf-aheadtag--goal"}, st.length === 1 ? st[0].name + " starts" : st.length + " goals start");
+}
+function goalsPlanRow(cf){
+  const cid = cf.C.id;
+  const rel = state.goals.map(function(g){ return { g: g, gp: goalPlan(g) }; }).filter(function(x){ return goalActiveIn(x.gp, cid) || (x.gp.startC === cid && !x.gp.reached); });
+  if (!rel.length) return null;
+  const act = rel.filter(function(x){ return goalActiveIn(x.gp, cid); }), st = rel.filter(function(x){ return x.gp.startC === cid; });
+  const tot = round2(act.reduce(function(t, x){ return t + x.gp.per; }, 0));
+  const sub = (st.length ? (st.length === 1 ? st[0].g.name + " starts" : st.length + " goals start") + " \u00B7 " : "")
+    + (act.length ? act.length + " goal" + (act.length === 1 ? "" : "s") + " to save for" : "nothing to put aside yet");
+  return cfRow(h("span",{class:"pf-ic pf-ic--pos"}, glyphSvg("coins",20,"var(--pos)")), "Savings goals", sub,
+    h("span",{class:"pf-expamt"}, money0(tot)), function(){ openMonthGoals(cf.offset); });
+}
+function openMonthGoals(offset){
+  const cid = shiftCycleId(cyc().id, offset), C = cycleById(cid), back = function(){ openMonthGoals(offset); };
+  const list = h("div",{class:"pf-list"}); let tot = 0;
+  state.goals.forEach(function(g){
+    const gp = goalPlan(g), act = goalActiveIn(gp, cid), starts = gp.startC === cid && !gp.reached;
+    if (!act && !starts) return;
+    if (act) tot += gp.per;
+    const sub = starts ? "Starts this month" + (gp.per ? " \u00B7 " + money0(gp.per) + " a month until " + fmtDateY(gp.end) : " \u00B7 no end date yet")
+      : gp.endC === cid ? "Last month to save \u00B7 needed " + fmtDateY(gp.end) : money0(gp.per) + " a month until " + fmtDateY(gp.end);
+    list.appendChild(cfRow(h("span",{class:"pf-ic", style:{background:tileBg(g.color)}}, glyphSvg(g.glyph, 20, g.color)), g.name, sub,
+      h("span",{class:"pf-expamt"}, act ? money0(gp.per) : "\u2014"), function(){ openGoal(g, { onDone: back }); }));
+  });
+  if (!list.children.length) list.appendChild(emptyNode("No goals need money from " + cycleShort(cid) + "."));
+  openSheet("Savings goals \u00B7 " + cycleShort(cid), h("div",{},
+    h("p",{class:"pf-help"}, "What your goals need from " + cycleShort(cid) + "'s pay. It comes out of what you set aside for savings, so it isn't taken off the forecast separately."),
+    list,
+    tot ? h("div",{class:"pf-bd pf-cfsum", style:{marginTop:"12px"}}, h("div",{class:"pf-bdrow pf-bdrow--tot"}, h("span",{}, "Put aside in " + cycleShort(cid)), h("strong",{class:"pf-pos"}, money0(tot)))) : null,
+    h("div",{class:"pf-row2"}, h("button",{class:"pf-btn pf-btn--sec", onClick:function(){ openGoal(null, { startDate: isoDate(C.start), onDone: back }); }}, icon("plus",16), " Goal starting this month")),
+    actions(primaryBtn("Done", function(){ openCashflow(offset); }))));
+}
+
 /* --------------------------------- Look back --------------------------------- */
 function budgetsFor(cid){
   const r = cid < cyc().id ? histFor(cid) : null;
@@ -1818,7 +1942,7 @@ function lbSummary(cf){
     h("div",{class:"pf-lbnote"}, "You added this month's totals yourself, so they stay as you typed them."));
   const carryNote = !state.carryOver ? null : carryEdited(next) != null
     ? "You set " + cycleShort(next) + "'s carry-over yourself (" + money2(carryEdited(next)) + ")."
-    : "Carried into " + cycleShort(next) + (next === cyc().id ? " — this month." : ".");
+    : "Carried into " + cycleShort(next) + (next === cyc().id ? " \u2014 this month." : ".");
   return h("div",{class:"pf-bd pf-cfsum"},
     row("Money in", money2(m.income)),
     row("Salary", money2(m.salary), null, true),
@@ -1836,7 +1960,7 @@ function lbCheck(cf){
   if (!cf.cats.length) box.appendChild(h("div",{class:"pf-calempty"}, "No day-to-day budgets, and nothing logged this month."));
   cf.cats.forEach(function(x){
     const c = catOf(x.cat), gap = round2(x.budget - x.logged);
-    const status = !x.budget ? h("span",{class:"pf-lbstat"}, "No budget — counted as extra")
+    const status = !x.budget ? h("span",{class:"pf-lbstat"}, "No budget \u2014 counted as extra")
       : gap > 0 ? h("span",{class:"pf-lbstat pf-lbstat--gap"}, money2(gap) + " not logged")
       : gap < 0 ? h("span",{class:"pf-lbstat pf-lbstat--over"}, money2(-gap) + " over budget")
       : h("span",{class:"pf-lbstat pf-lbstat--ok"}, "All logged");
@@ -1858,7 +1982,7 @@ function lbCheck(cf){
       h("div",{class:"pf-bdrow"}, h("span",{}, "Your bank on " + fmtShort(a.date)), h("span",{}, money2(a.amount))),
       h("div",{class:"pf-bdrow"}, h("span",{}, "What you logged points to"), h("span",{}, money2(logged))),
       h("div",{class:"pf-bdrow pf-bdrow--tot"}, h("span",{}, d === 0 ? "Matches what you logged" : d < 0 ? "Not accounted for" : "More than you logged"),
-        h("strong",{class: d < 0 ? "pf-neg" : "pf-pos"}, d === 0 ? "✓" : money2(Math.abs(d))))));
+        h("strong",{class: d < 0 ? "pf-neg" : "pf-pos"}, d === 0 ? "\u2713" : money2(Math.abs(d))))));
     if (d < 0) box.appendChild(h("p",{class:"pf-mini"}, "Check your bank app for spending you didn't log before " + fmtShort(a.date) + ", and add it on the right day below."));
   } else box.appendChild(h("p",{class:"pf-mini"}, "Add what your bank showed at the end of the month, and the app shows how much isn't accounted for."));
   box.appendChild(h("button",{type:"button", class:"pf-calbtn pf-calbtn--wide", onClick:function(){ openBalance(null, { date: cf.E, back: cf.offset, sel: cf.E }); }},
@@ -1903,7 +2027,7 @@ function openLookBack(offset, opts){
       onClick:function(){ if (view !== o[0]) openLookBack(offset, { view:o[0], sel:sel }); }}, o[1]));
   });
   openSheet("Look back", h("div",{},
-    step, h("div",{class:"pf-cfrange"}, fmtDay(cf.S) + " – " + fmtDay(cf.E)),
+    step, h("div",{class:"pf-cfrange"}, fmtDay(cf.S) + " \u2013 " + fmtDay(cf.E)),
     h("p",{class:"pf-help"}, "Everything for this month: what came in, what went out and what you logged. Spot something missing? Tap its day and add it."),
     lbSummary(cf), lbCheck(cf),
     h("div",{class:"pf-cfviewbar"}, h("span",{class:"pf-cfviewlab"}, "Day by day"), viewSeg),
@@ -1933,7 +2057,8 @@ function aheadCard(){
       h("span",{class:"pf-aheadtags"},
         dip ? h("span",{class:"pf-aheadtag pf-aheadtag--neg"}, "dips below \u00A30") : null,
         n ? h("span",{class:"pf-aheadtag"}, n + " change" + (n === 1 ? "" : "s")) : null,
-        sh ? h("span",{class:"pf-aheadtag"}, sh + " shift" + (sh === 1 ? "" : "s")) : null)));
+        sh ? h("span",{class:"pf-aheadtag"}, sh + " shift" + (sh === 1 ? "" : "s")) : null,
+        goalStartTag(cid))));
   })(k);
   card.appendChild(row);
   card.appendChild(h("p",{class:"pf-mini pf-aheadnote"}, "Each month starts where the one before is forecast to finish. Tap one to change its salary or bills, and to plan shifts, spends and money in."));
@@ -1955,7 +2080,8 @@ function planBox(cf){
     cfRow(h("span",{class:"pf-ic pf-ic--acc"}, glyphSvg("receipt",20,"var(--accent)")), "Bills",
       all.length + " bill" + (all.length === 1 ? "" : "s") + (tags ? " \u00B7 " + tags : ""), h("span",{class:"pf-expamt"}, money2(billsTot)), function(){ openMonthBills(cf.offset); }),
     cfRow(h("span",{class:"pf-ic pf-ic--acc"}, glyphSvg("clock",20,"var(--accent)")), "Bank shifts",
-      shs.length ? shs.length + " planned \u00B7 counts towards this month" : "None planned yet \u2014 tap to add", h("span",{class:"pf-expamt"}, money2(shTot)), function(){ openMonthShifts(cf.offset); }));
+      shs.length ? shs.length + " planned \u00B7 counts towards this month" : "None planned yet \u2014 tap to add", h("span",{class:"pf-expamt"}, money2(shTot)), function(){ openMonthShifts(cf.offset); }),
+    goalsPlanRow(cf));
 }
 function openSalaryFor(cid, onDone){
   const p = planFor(cid), usual = state.salary || 0, done = function(){ if (onDone) onDone(); else closeSheet(); };
